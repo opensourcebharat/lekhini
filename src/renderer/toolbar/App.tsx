@@ -264,6 +264,15 @@ export function ToolbarApp() {
     void window.pen.win.setContentSize({ axis: 'v', size: target });
   };
 
+  // Mirror the active theme onto <body> so Portal-mounted children
+  // (PermissionModal, Toast) inherit the same --bg / --text tokens.
+  // Without this, portal content renders into document.body which
+  // sits outside .bar's CSS-variable scope and falls back to black
+  // text on transparent — invisible against the dark toolbar.
+  createEffect(() => {
+    document.body.dataset.theme = hub().theme;
+  });
+
   // Re-measure after the DOM has settled following any state change that
   // affects content size. RAF defers to after Solid flushes its updates.
   createEffect(() => {

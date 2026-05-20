@@ -18,8 +18,17 @@ html, body {
 
 #root { width: 100vw; height: 100vh; }
 
-/* ── Theme tokens ── */
+/* ── Theme tokens ──
+   Defined on BOTH the .bar element and the body. The body copy is
+   what lets Portal-mounted content (PermissionModal, Toast) inherit
+   the same tokens — portals render into document.body, outside .bar,
+   so without these duplicated vars the modal/toast text falls back to
+   the browser default (black) and disappears against the dark
+   toolbar background. App.tsx mirrors hub().theme onto
+   document.body.dataset.theme so the light-mode overrides below take
+   effect on body too. */
 
+body,
 .bar {
   /* Dark (default) */
   --bg: linear-gradient(180deg, #2a2a2e 0%, #1c1c20 100%);
@@ -51,6 +60,7 @@ html, body {
   --shadow: 0 1px 0 rgba(255, 255, 255, 0.06) inset, 0 18px 50px rgba(0, 0, 0, 0.55);
 }
 
+body[data-theme='light'],
 .bar[data-theme='light'] {
   --bg: linear-gradient(180deg, #fafafb 0%, #ececef 100%);
   --text: #1c1c1e;
