@@ -3,6 +3,11 @@ productName: Lekhini
 copyright: Copyright © 2026 Open Source Bharat — https://opensourcebharat.org
 asar: true
 
+# Single source-of-truth for the app icon. electron-builder auto-
+# generates the platform-specific .icns (macOS) and .ico (Windows)
+# from this PNG. Recommended: 1024×1024, transparent background.
+icon: build/icon.png
+
 directories:
   output: release
   buildResources: build

@@ -1,4 +1,8 @@
-# Lekhini
+<p align="center">
+  <img src="./build/icon.png" alt="Lekhini" width="128" height="128" />
+</p>
+
+<h1 align="center">Lekhini</h1>
 
 > लेखनी — Sanskrit for *"pen"*. A free, open-source on-screen
 > annotation overlay for macOS, Windows, and Linux. A project of

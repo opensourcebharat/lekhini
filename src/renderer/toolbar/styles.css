@@ -256,7 +256,7 @@ html, body {
   flex-shrink: 0;
 }
 .v-brand .logo { display: inline-flex; }
-.v-brand .logo svg { width: 24px; height: 24px; }
+.v-brand .logo svg, .v-brand .logo img { width: 24px; height: 24px; }
 
 .v-theme-btn {
   -webkit-app-region: no-drag;
@@ -611,7 +611,7 @@ html, body {
   background: var(--separator);
 }
 .mini-logo { -webkit-app-region: no-drag; display: inline-flex; }
-.mini-logo svg { width: 30px; height: 30px; }
+.mini-logo svg, .mini-logo img { width: 30px; height: 30px; border-radius: 6px; }
 
 /* ─────────────────── SETTINGS DROPDOWN ─────────────────── */
 
@@ -778,7 +778,7 @@ html, body {
   display: inline-flex;
   align-items: center;
 }
-.about-logo svg { width: 28px; height: 28px; }
+.about-logo svg, .about-logo img { width: 28px; height: 28px; border-radius: 6px; }
 .about-title-block {
   display: flex;
   flex-direction: column;

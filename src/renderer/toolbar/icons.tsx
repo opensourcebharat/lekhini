@@ -240,22 +240,50 @@ export const Icons = {
     ),
 };
 
-export const Logo = (): JSX.Element => (
-  <svg width="22" height="22" viewBox="0 0 32 32" xmlns="http://www.w3.org/2000/svg">
-    <defs>
-      <linearGradient id="lg" x1="0" y1="0" x2="1" y2="1">
-        <stop offset="0%" stop-color="#e8c98a" />
-        <stop offset="100%" stop-color="#a07835" />
-      </linearGradient>
-    </defs>
-    <rect x="2" y="2" width="28" height="28" rx="7" fill="#16161a" stroke="url(#lg)" stroke-width="1.4" />
-    <path
-      d="M9 23l2-1 11-11-2-2-11 11-1 2.6 .9.6z"
-      fill="url(#lg)"
-      stroke="#1c1c1e"
-      stroke-width="0.6"
-      stroke-linejoin="round"
-    />
-    <path d="M19 9l2 2" stroke="#1c1c1e" stroke-width="0.9" stroke-linecap="round" />
-  </svg>
-);
+// Look up the user-supplied logo at build/icon.png via Vite's
+// import.meta.glob. This does NOT fail the build when the file is
+// absent — the glob simply returns an empty object — so the project
+// keeps building until the user drops their PNG in. As soon as
+// build/icon.png exists, Vite picks it up on the next dev refresh /
+// build and the inline SVG fallback below is bypassed.
+const _logoMods = import.meta.glob('../../../build/icon.png', {
+  eager: true,
+  query: '?url',
+  import: 'default',
+}) as Record<string, string>;
+const LOGO_PNG_URL: string | undefined = Object.values(_logoMods)[0];
+
+export const Logo = (): JSX.Element => {
+  if (LOGO_PNG_URL) {
+    return (
+      <img
+        src={LOGO_PNG_URL}
+        alt="Lekhini"
+        width="22"
+        height="22"
+        style={{ 'border-radius': '5px', display: 'block' }}
+      />
+    );
+  }
+  // Fallback — same gold-pencil mark used since the project was
+  // initialised. Stays in place until build/icon.png is added.
+  return (
+    <svg width="22" height="22" viewBox="0 0 32 32" xmlns="http://www.w3.org/2000/svg">
+      <defs>
+        <linearGradient id="lg" x1="0" y1="0" x2="1" y2="1">
+          <stop offset="0%" stop-color="#e8c98a" />
+          <stop offset="100%" stop-color="#a07835" />
+        </linearGradient>
+      </defs>
+      <rect x="2" y="2" width="28" height="28" rx="7" fill="#16161a" stroke="url(#lg)" stroke-width="1.4" />
+      <path
+        d="M9 23l2-1 11-11-2-2-11 11-1 2.6 .9.6z"
+        fill="url(#lg)"
+        stroke="#1c1c1e"
+        stroke-width="0.6"
+        stroke-linejoin="round"
+      />
+      <path d="M19 9l2 2" stroke="#1c1c1e" stroke-width="0.9" stroke-linecap="round" />
+    </svg>
+  );
+};
