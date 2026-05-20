@@ -45,23 +45,31 @@ export function notifyStatus(): void {
 
 // macOS-only: register a one-shot listener that fires the next time
 // any of our windows regains focus. The user clicked "Open System
-// Settings" in the modal, granted the permission, then alt-tabbed
-// back to Lekhini — that focus event is our signal to recheck. The
-// listener is auto-cleared after firing so we don't leak handlers
-// across modal open/close cycles.
-let pendingRecheck: (() => void) | null = null;
+// Settings" in the side panel, granted the permission, then
+// alt-tabbed back to Lekhini — that focus event is our signal to
+// recheck.
+//
+// Only one listener at a time: each call to onFocusRecheck swaps the
+// pending callback in-place rather than stacking another `app.once`.
+// The previous behaviour (stacking) leaked listeners every time a
+// denied screenshot was attempted, eventually hitting Node's
+// MaxListeners warning at 11.
+let pendingRecheck: ((status: ScreenPermissionStatus) => void) | null = null;
+let activeFocusHandler: (() => void) | null = null;
 export function onFocusRecheck(cb: (status: ScreenPermissionStatus) => void): void {
-  // Replace any prior pending callback (no point in stacking).
-  pendingRecheck = () => cb(screenStatus());
-  const handler = (): void => {
-    if (!pendingRecheck) return;
+  pendingRecheck = cb;
+  if (activeFocusHandler) return; // already armed; just updated cb
+  activeFocusHandler = () => {
     const fn = pendingRecheck;
     pendingRecheck = null;
-    // Defer one tick — macOS sometimes updates TCC state slightly
-    // after the focus event fires.
-    setTimeout(fn, 120);
+    activeFocusHandler = null;
+    if (fn) {
+      // Defer one tick — macOS sometimes updates TCC state slightly
+      // after the focus event fires.
+      setTimeout(() => fn(screenStatus()), 120);
+    }
   };
-  app.once('browser-window-focus', handler);
+  app.once('browser-window-focus', activeFocusHandler);
 }
 
 export function registerPermissionsIpc() {

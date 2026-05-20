@@ -29,6 +29,11 @@ export interface HubState {
   perToolWidth: PerToolWidth;
   saveDir: string | null;
   alwaysAskSavePath: boolean;
+  // Whether the renderer is currently showing the status side panel
+  // (permission / save error). Transient — never persisted. Tracked
+  // in hub so main can grow the toolbar window to fit, the same way
+  // it does for settingsOpen.
+  statusPanelOpen: boolean;
 }
 
 const state: HubState = {
@@ -46,6 +51,7 @@ const state: HubState = {
   perToolWidth: { pencil: 3, pen: 4, eraser: 20, highlighter: 18 },
   saveDir: null,
   alwaysAskSavePath: false,
+  statusPanelOpen: false,
 };
 
 const subscribers = new Set<BrowserWindow>();
@@ -267,6 +273,20 @@ export function patch(update: HubStateUpdate) {
     state.alwaysAskSavePath = update.alwaysAskSavePath;
     changed.add('alwaysAskSavePath');
     save('alwaysAskSavePath', state.alwaysAskSavePath);
+  }
+  if (
+    update.statusPanelOpen !== undefined &&
+    update.statusPanelOpen !== state.statusPanelOpen
+  ) {
+    state.statusPanelOpen = update.statusPanelOpen;
+    changed.add('statusPanelOpen');
+    // Status panel and settings are mutually exclusive panels in the
+    // same dock slot — opening one closes the other so the renderer
+    // and main agree on what's showing.
+    if (state.statusPanelOpen && state.settingsOpen) {
+      state.settingsOpen = false;
+      changed.add('settingsOpen');
+    }
   }
   broadcast(changed);
 }

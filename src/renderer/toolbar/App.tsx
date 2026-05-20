@@ -30,6 +30,7 @@ interface HubSnapshot {
   perToolWidth: { pencil: number; pen: number; eraser: number; highlighter: number };
   saveDir: string | null;
   alwaysAskSavePath: boolean;
+  statusPanelOpen: boolean;
 }
 
 type FlyoutTool = 'pencil' | 'pen' | 'eraser' | 'highlighter';
@@ -96,6 +97,7 @@ export function ToolbarApp() {
     perToolWidth: { pencil: 3, pen: 4, eraser: 20, highlighter: 18 },
     saveDir: null,
     alwaysAskSavePath: false,
+    statusPanelOpen: false,
   });
   // Status-panel state. Mutually exclusive with the settings panel —
   // when one opens, the layout slot belongs to it. `panelError` holds
@@ -269,16 +271,18 @@ export function ToolbarApp() {
     }
 
     let target = barMainHeight;
-    if (s.settingsOpen) {
-      const settingsPanel = barMainRef.parentElement?.querySelector(
+    // Settings panel and status panel both render with class
+    // .settings-panel; whichever is open occupies the dock slot.
+    if (s.settingsOpen || s.statusPanelOpen) {
+      const sidePanel = barMainRef.parentElement?.querySelector(
         '.settings-panel',
       ) as HTMLElement | null;
-      if (settingsPanel) {
-        const settingsHeight = settingsPanel.scrollHeight;
+      if (sidePanel) {
+        const sideHeight = sidePanel.scrollHeight;
         target =
           s.orientation === 'h'
-            ? barMainHeight + settingsHeight
-            : Math.max(barMainHeight, settingsHeight);
+            ? barMainHeight + sideHeight
+            : Math.max(barMainHeight, sideHeight);
       }
     }
     // 2px for the bar's 1px border on each side.
@@ -296,6 +300,7 @@ export function ToolbarApp() {
     void s.orientation;
     void s.minimized;
     void s.settingsOpen;
+    void s.statusPanelOpen;
     void s.thicknessFlyoutOpen;
     void s.profile;
     void s.activeTool;
@@ -307,6 +312,16 @@ export function ToolbarApp() {
   // (mirrors the same logic the settings-open broadcast uses).
   createEffect(() => {
     if (panelKind() !== null) refreshSide();
+  });
+
+  // Push panelKind open/close into the hub so main resizes the
+  // toolbar window to fit. Avoid an immediate redundant patch on
+  // first mount where both sides are already false.
+  createEffect(() => {
+    const open = panelKind() !== null;
+    if (open !== hub().statusPanelOpen) {
+      void window.pen.hub.update({ statusPanelOpen: open });
+    }
   });
 
   // Whenever a side panel flips open, ask main which side of the screen
@@ -370,7 +385,13 @@ export function ToolbarApp() {
   };
   const closeSettings = () => void window.pen.hub.update({ settingsOpen: false });
 
-  // Status-panel actions.
+  // Status-panel actions. panelKind drives the rendered content;
+  // hub.statusPanelOpen is the open/close flag main watches so it
+  // can grow/shrink the toolbar window to fit the panel (in v-mode
+  // the dock slot's width comes from main's resizeToolbar, not CSS).
+  // A createEffect below keeps them in sync — without this mirror
+  // the panel would render inside the 88px-wide v-mode bar and be
+  // effectively invisible.
   const closePanel = () => {
     setPanelKind(null);
     setPanelError(null);

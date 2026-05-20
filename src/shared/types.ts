@@ -139,6 +139,11 @@ export type HubStateUpdate = {
   perToolWidth?: Partial<PerToolWidth>;
   saveDir?: string | null;
   alwaysAskSavePath?: boolean;
+  // Transient — not persisted. Mirrors whether the renderer is
+  // showing the status side panel (permission / save error) so
+  // main can resize the toolbar window to fit it, the same way it
+  // does for settingsOpen.
+  statusPanelOpen?: boolean;
 };
 
 export type IpcChannel =
