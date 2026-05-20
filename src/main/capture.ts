@@ -77,11 +77,11 @@ function gateScreenForCapture(action: PendingAction): boolean {
   if (!needsScreenModal()) return true;
   broadcast('permissions:needed', { reason: 'screen' });
   pendingAction = action;
-  onFocusRecheck((newStatus) => {
+  onFocusRecheck((result) => {
     // Pass the fresh status explicitly so renderers don't see the
     // possibly-stale getMediaAccessStatus cache.
-    notifyStatus(newStatus);
-    if (newStatus !== 'granted') return;
+    notifyStatus(result.screen, result.probeError);
+    if (result.screen !== 'granted') return;
     const a = pendingAction;
     pendingAction = null;
     if (a === 'capture') void captureFocusedDisplay();
@@ -185,9 +185,9 @@ function handleCaptureFailure(): boolean {
   if (needsScreenModal()) {
     broadcast('permissions:needed', { reason: 'screen' });
     pendingAction = 'capture';
-    onFocusRecheck((newStatus) => {
-      notifyStatus(newStatus);
-      if (newStatus === 'granted' && pendingAction === 'capture') {
+    onFocusRecheck((result) => {
+      notifyStatus(result.screen, result.probeError);
+      if (result.screen === 'granted' && pendingAction === 'capture') {
         pendingAction = null;
         void captureFocusedDisplay();
       }

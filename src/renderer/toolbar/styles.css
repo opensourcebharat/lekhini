@@ -983,6 +983,24 @@ html, body {
   border-radius: 6px;
 }
 
+/* When the recheck probe outright threw — process is stuck until
+   relaunch. Red-tinted hint draws attention to the Relaunch button. */
+.status-hint.is-stuck {
+  color: #e74c3c;
+  background: rgba(231, 76, 60, 0.10);
+  border-color: rgba(231, 76, 60, 0.30);
+}
+
+/* Dev-mode footnote — small, italic, neutral. Disappears in packaged
+   builds where it's never relevant. */
+.status-footnote {
+  font-size: 10px;
+  line-height: 1.35;
+  color: var(--hint);
+  font-style: italic;
+  margin-top: 2px;
+}
+
 .status-actions {
   display: flex;
   flex-wrap: wrap;

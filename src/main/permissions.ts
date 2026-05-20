@@ -30,6 +30,17 @@ export function screenStatus(): ScreenPermissionStatus {
   return check().screen;
 }
 
+export interface DeepRecheckResult {
+  screen: ScreenPermissionStatus;
+  // True when desktopCapturer.getSources() threw outright (not just
+  // returned an empty array). On macOS this signals that Chromium's
+  // in-process capture pipeline initialised while permission was
+  // denied and is now permanently stuck — only restarting the
+  // process will recover. The renderer uses this to make "Relaunch"
+  // the recommended next action instead of "Recheck".
+  probeError: boolean;
+}
+
 // Active probe of the actual capture API. macOS's TCC layer returns a
 // cached value from getMediaAccessStatus that does NOT refresh just
 // because the user toggled Screen Recording on in System Settings —
@@ -41,23 +52,28 @@ export function screenStatus(): ScreenPermissionStatus {
 // The probe requests a 1×1 thumbnail so it returns fast and uses
 // almost no memory. If we get any sources back, permission is real
 // and the user can proceed.
-export async function deepRecheck(): Promise<ScreenPermissionStatus> {
-  if (process.platform !== 'darwin') return 'granted';
+export async function deepRecheck(): Promise<DeepRecheckResult> {
+  if (process.platform !== 'darwin') return { screen: 'granted', probeError: false };
   const cached = screenStatus();
-  if (cached === 'granted') return 'granted';
+  if (cached === 'granted') return { screen: 'granted', probeError: false };
   try {
     const sources = await desktopCapturer.getSources({
       types: ['screen'],
       thumbnailSize: { width: 1, height: 1 },
     });
-    if (sources.length > 0) return 'granted';
+    if (sources.length > 0) return { screen: 'granted', probeError: false };
+    return { screen: screenStatus(), probeError: false };
   } catch (err) {
     console.warn('[pen] deepRecheck capture probe failed', err);
+    // The throw itself is the diagnostic signal — the process can't
+    // recover until restart. Re-read cache one more time in case it
+    // flipped during the probe call.
+    const after = screenStatus();
+    return {
+      screen: after === 'granted' ? 'granted' : cached,
+      probeError: true,
+    };
   }
-  // Probe failed too — re-read the cache one more time in case it
-  // flipped during the probe, otherwise return whatever we saw first.
-  const after = screenStatus();
-  return after === 'granted' ? 'granted' : cached;
 }
 
 export function open(which: 'screen' | 'accessibility') {
@@ -76,9 +92,14 @@ export function open(which: 'screen' | 'accessibility') {
 //
 // Pass `override` when you already know the fresh status — e.g. after
 // deepRecheck() — so renderers receive the truth instead of the
-// possibly-stale cached value from getMediaAccessStatus.
-export function notifyStatus(override?: ScreenPermissionStatus): void {
-  const payload = { screen: override ?? screenStatus() };
+// possibly-stale cached value from getMediaAccessStatus. `probeError`
+// piggy-backs along so the renderer can promote the Relaunch button
+// when getSources() outright threw (process-permanently-stuck case).
+export function notifyStatus(
+  override?: ScreenPermissionStatus,
+  probeError = false,
+): void {
+  const payload = { screen: override ?? screenStatus(), probeError };
   for (const win of BrowserWindow.getAllWindows()) {
     if (!win.isDestroyed()) win.webContents.send('permissions:status', payload);
   }
@@ -95,9 +116,9 @@ export function notifyStatus(override?: ScreenPermissionStatus): void {
 // The previous behaviour (stacking) leaked listeners every time a
 // denied screenshot was attempted, eventually hitting Node's
 // MaxListeners warning at 11.
-let pendingRecheck: ((status: ScreenPermissionStatus) => void) | null = null;
+let pendingRecheck: ((result: DeepRecheckResult) => void) | null = null;
 let activeFocusHandler: (() => void) | null = null;
-export function onFocusRecheck(cb: (status: ScreenPermissionStatus) => void): void {
+export function onFocusRecheck(cb: (result: DeepRecheckResult) => void): void {
   pendingRecheck = cb;
   if (activeFocusHandler) return; // already armed; just updated cb
   activeFocusHandler = () => {
@@ -119,9 +140,7 @@ export function onFocusRecheck(cb: (status: ScreenPermissionStatus) => void): vo
 export function registerPermissionsIpc() {
   ipcMain.handle('permissions:check', () => check());
   ipcMain.handle('permissions:open', (_evt, which: 'screen' | 'accessibility') => open(which));
-  ipcMain.handle('permissions:deep-recheck', async () => ({
-    screen: await deepRecheck(),
-  }));
+  ipcMain.handle('permissions:deep-recheck', () => deepRecheck());
   // Relaunch escape hatch — surfaced in the permission panel for the
   // rare macOS cases where even the deep probe can't see a freshly
   // granted permission until the process restarts.

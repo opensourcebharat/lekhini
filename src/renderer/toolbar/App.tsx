@@ -68,6 +68,22 @@ const TOOL_BY_ID: Record<ToolId, ToolDef> = ALL_TOOLS.reduce(
   {} as Record<ToolId, ToolDef>,
 );
 
+// Permission-panel hint copy. When probeError=true, desktopCapturer
+// outright threw on the recheck attempt — the process can't pick the
+// new TCC state up without a relaunch.
+function stuckHint(probeError: boolean): string {
+  if (probeError) {
+    return (
+      "macOS can't refresh the permission for a running process — " +
+      'Click Relaunch to restart Lekhini and pick up the change.'
+    );
+  }
+  return (
+    "Still off. Make sure Lekhini is toggled on under Privacy & Security " +
+    '→ Screen Recording, then click Recheck.'
+  );
+}
+
 // Display-friendly path: replace the home dir with `~` and ellipsize
 // the middle if the result is still long. Pure cosmetic — the toast
 // is narrow and a full POSIX path overflows.
@@ -107,6 +123,10 @@ export function ToolbarApp() {
   const [panelKind, setPanelKind] = createSignal<PanelKind | null>(null);
   const [panelError, setPanelError] = createSignal<string | null>(null);
   const [panelHint, setPanelHint] = createSignal<string | null>(null);
+  // True after a recheck attempt where desktopCapturer.getSources()
+  // outright threw — process is stuck until relaunch. Drives the
+  // panel to promote the Relaunch button over Recheck.
+  const [permStuck, setPermStuck] = createSignal(false);
   // Set by capture:saved so the titlebar hint becomes a clickable
   // 'Reveal' that opens the file's folder. Cleared on next hover hint
   // or after revealMs.
@@ -115,9 +135,14 @@ export function ToolbarApp() {
   const [platform, setPlatform] = createSignal<NodeJS.Platform>('darwin');
   const [hint, setHint] = createSignal<string>('');
   const [settingsOnLeft, setSettingsOnLeft] = createSignal(false);
-  const [appInfo, setAppInfo] = createSignal<{ name: string; version: string }>({
+  const [appInfo, setAppInfo] = createSignal<{
+    name: string;
+    version: string;
+    packaged: boolean;
+  }>({
     name: 'Lekhini',
     version: '1.0.0',
+    packaged: true,
   });
   let scrollRef: HTMLDivElement | undefined;
   let barMainRef: HTMLDivElement | undefined;
@@ -148,6 +173,7 @@ export function ToolbarApp() {
     // toast inside a tiny toolbar window.
     const offNeeded = window.pen.permissions.onNeeded(() => {
       setPanelHint(null);
+      setPermStuck(false);
       setPanelKind('permission');
       // Close settings if it was occupying the slot.
       if (hub().settingsOpen) void window.pen.hub.update({ settingsOpen: false });
@@ -156,11 +182,10 @@ export function ToolbarApp() {
       if (p.screen === 'granted') {
         setPanelKind((k) => (k === 'permission' ? null : k));
         setPanelHint(null);
+        setPermStuck(false);
       } else if (panelKind() === 'permission') {
-        setPanelHint(
-          "Still off — macOS sometimes only sees the change after a restart. " +
-            "If you just toggled it on, click Relaunch.",
-        );
+        setPermStuck(!!p.probeError);
+        setPanelHint(stuckHint(!!p.probeError));
       }
     });
     const offSaved = window.pen.capture.onSaved((p) => {
@@ -407,17 +432,16 @@ export function ToolbarApp() {
     // permission on in System Settings. The deep probe actually hits
     // desktopCapturer and forces a TCC refresh.
     setPanelHint('Checking…');
-    const status = (await window.pen.permissions.deepCheck()) as {
+    const result = (await window.pen.permissions.deepCheck()) as {
       screen: 'granted' | 'denied' | 'not-determined' | 'restricted' | 'unknown';
+      probeError: boolean;
     };
-    if (status.screen === 'granted') {
+    if (result.screen === 'granted') {
       closePanel();
-    } else {
-      setPanelHint(
-        "Still off — macOS sometimes only sees the change after a restart. " +
-          "If you just toggled it on, click Relaunch.",
-      );
+      return;
     }
+    setPermStuck(result.probeError);
+    setPanelHint(stuckHint(result.probeError));
   };
   const openScreenPrefs = () => void window.pen.permissions.open('screen');
   const relaunchApp = () => void window.pen.app.relaunch();
@@ -963,15 +987,26 @@ export function ToolbarApp() {
                   </div>
                 </div>
                 <Show when={panelHint()}>
-                  <div class="status-hint">{panelHint()}</div>
+                  <div class={`status-hint ${permStuck() ? 'is-stuck' : ''}`}>
+                    {panelHint()}
+                  </div>
                 </Show>
                 <div class="status-actions">
-                  <Show when={isMac()}>
+                  <Show when={isMac() && !permStuck()}>
                     <button
                       class="settings-toggle status-btn-primary"
                       onClick={openScreenPrefs}
                     >
                       Open System Settings
+                    </button>
+                  </Show>
+                  <Show when={isMac() && permStuck()}>
+                    <button
+                      class="settings-toggle status-btn-primary"
+                      onClick={relaunchApp}
+                      title="macOS can't update the permission for a running process — restart picks it up"
+                    >
+                      Relaunch Lekhini
                     </button>
                   </Show>
                   <button
@@ -980,7 +1015,7 @@ export function ToolbarApp() {
                   >
                     Recheck
                   </button>
-                  <Show when={isMac()}>
+                  <Show when={isMac() && !permStuck()}>
                     <button
                       class="settings-toggle status-btn-relaunch"
                       onClick={relaunchApp}
@@ -989,7 +1024,18 @@ export function ToolbarApp() {
                       Relaunch
                     </button>
                   </Show>
+                  <Show when={isMac() && permStuck()}>
+                    <button class="settings-toggle" onClick={openScreenPrefs}>
+                      Open System Settings
+                    </button>
+                  </Show>
                 </div>
+                <Show when={isMac() && !appInfo().packaged}>
+                  <div class="status-footnote">
+                    Dev mode — TCC quirks are normal here. The packaged
+                    Lekhini build doesn't have this caching issue.
+                  </div>
+                </Show>
               </div>
             </Show>
 

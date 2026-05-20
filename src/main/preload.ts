@@ -69,6 +69,7 @@ const api = {
     onStatus: (
       cb: (payload: {
         screen: 'granted' | 'denied' | 'not-determined' | 'restricted' | 'unknown';
+        probeError?: boolean;
       }) => void,
     ) => bind('permissions:status', cb as (v: unknown) => void),
   },

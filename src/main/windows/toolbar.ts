@@ -170,6 +170,10 @@ export function registerToolbarIpc() {
   ipcMain.handle('app:info', () => ({
     name: app.getName(),
     version: app.getVersion(),
+    // isPackaged is the canonical Electron check for production vs
+    // dev-server run. Surfaced so the renderer can flag dev-mode TCC
+    // quirks (which are normal in dev but absent in packaged builds).
+    packaged: app.isPackaged,
   }));
   // Renderer reports its desired content height (vertical) or width
   // (horizontal). Main resizes the window to fit so empty space below

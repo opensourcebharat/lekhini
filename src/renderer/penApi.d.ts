@@ -51,10 +51,12 @@ declare global {
       };
       permissions: {
         check(): Promise<{ screen: ScreenPermissionStatus; accessibility: boolean }>;
-        deepCheck(): Promise<{ screen: ScreenPermissionStatus }>;
+        deepCheck(): Promise<{ screen: ScreenPermissionStatus; probeError: boolean }>;
         open(which: 'screen' | 'accessibility'): Promise<void>;
         onNeeded(cb: (payload: { reason: 'screen' }) => void): () => void;
-        onStatus(cb: (payload: { screen: ScreenPermissionStatus }) => void): () => void;
+        onStatus(
+          cb: (payload: { screen: ScreenPermissionStatus; probeError?: boolean }) => void,
+        ): () => void;
       };
       capture: {
         onSaved(cb: (payload: { path: string }) => void): () => void;
@@ -69,7 +71,7 @@ declare global {
         openPath(p: string): Promise<void>;
       };
       app: {
-        info(): Promise<{ name: string; version: string }>;
+        info(): Promise<{ name: string; version: string; packaged: boolean }>;
         relaunch(): Promise<void>;
       };
       env: {
