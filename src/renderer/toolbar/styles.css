@@ -157,16 +157,17 @@ html, body {
   pointer-events: none;
 }
 .tb-center .logo { display: inline-flex; align-items: center; }
-.tb-center .hint {
-  font-size: 11px;
-  color: var(--hint);
-  letter-spacing: 0.02em;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  transition: color 0.15s;
+/* h-mode logo: bigger now that nothing else sits in the titlebar
+   center. Subtle hover scale + soft glow when drawing so it doubles
+   as a brand mark and a 'is this thing working' affordance. */
+.tb-center .logo.big svg,
+.tb-center .logo.big img { width: 32px; height: 32px; border-radius: 7px; }
+.tb-center .logo.big {
+  transition: transform 0.18s cubic-bezier(0.2, 0.7, 0.2, 1);
 }
-.tb-center .hint.has-hint { color: var(--hint-accent); font-weight: 500; }
+.tb-center .logo.big:hover { transform: scale(1.06); }
+/* (Hover-hint text moved out of the titlebar into the new
+   .bar-footer at the bottom of the bar — see footer rules below.) */
 
 /* ── Window controls (generic / Windows) ── */
 
@@ -256,7 +257,15 @@ html, body {
   flex-shrink: 0;
 }
 .v-brand .logo { display: inline-flex; }
-.v-brand .logo svg { width: 24px; height: 24px; }
+/* v-mode logo: even bigger now that brand strip carries only the
+   logo (settings + status-dot moved to footer). The vertical
+   toolbar is 88px wide so 40px works comfortably with breathing
+   room. */
+.v-brand .logo svg, .v-brand .logo img { width: 40px; height: 40px; border-radius: 9px; }
+.v-brand .logo {
+  transition: transform 0.18s cubic-bezier(0.2, 0.7, 0.2, 1);
+}
+.v-brand .logo:hover { transform: scale(1.06); }
 
 .v-theme-btn {
   -webkit-app-region: no-drag;
@@ -276,33 +285,8 @@ html, body {
 .v-theme-btn:hover { background: var(--winctl-hover); color: var(--text); }
 .v-theme-btn svg { width: 12px; height: 12px; }
 
-/* Vertical hover-hint strip (replacement for floating tooltips, which
-   get clipped by the narrow toolbar window). */
-.v-hint {
-  -webkit-app-region: drag;
-  flex-shrink: 0;
-  height: 30px;
-  padding: 0 5px;
-  font-size: 9.5px;
-  letter-spacing: 0.02em;
-  color: var(--hint);
-  background: var(--titlebar-bg);
-  border-bottom: 1px solid var(--separator);
-  transition: color 0.12s;
-  text-align: center;
-  line-height: 1.15;
-  display: -webkit-box;
-  -webkit-line-clamp: 2;
-  -webkit-box-orient: vertical;
-  overflow: hidden;
-  word-break: break-word;
-  align-items: center;
-  justify-content: center;
-}
-.v-hint.has-hint {
-  color: var(--hint-accent);
-  font-weight: 600;
-}
+/* (The old .v-hint strip was removed — the hover-hint now lives in
+   the bottom .bar-footer that's shared by both orientations.) */
 
 /* ─────────────────── SCROLL AREA ─────────────────── */
 
@@ -410,7 +394,7 @@ html, body {
 .bar[data-orient='v'] .tools-zone,
 .bar[data-orient='v'] .actions-zone {
   display: grid;
-  grid-template-columns: repeat(2, 30px);
+  grid-template-columns: repeat(2, 26px);
   gap: 4px;
   background: var(--group-bg);
   border: 1px solid var(--group-border);
@@ -449,9 +433,9 @@ html, body {
   background: transparent;
   color: var(--text);
   border: 1px solid transparent;
-  border-radius: 6px;
-  width: 30px;
-  height: 30px;
+  border-radius: 7px;
+  width: 26px;
+  height: 26px;
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -486,7 +470,7 @@ html, body {
   color: var(--gold);
   opacity: 1;
 }
-.tool-btn svg, .action-btn svg { width: 19px; height: 19px; }
+.tool-btn svg, .action-btn svg { width: 18px; height: 18px; }
 
 /* ─────────────────── PINNED COLOR / WIDTH ─────────────────── */
 
@@ -500,26 +484,26 @@ html, body {
   gap: 12px;
 }
 
-.swatches { display: flex; gap: 5px; align-items: center; }
+.swatches { display: flex; gap: 6px; align-items: center; }
 .swatch {
-  width: 18px;
-  height: 18px;
-  border-radius: 50%;
-  border: 1.5px solid var(--swatch-border);
+  width: 22px;
+  height: 22px;
+  border-radius: 5px;
+  border: 2px solid var(--swatch-border);
   cursor: pointer;
-  transition: transform 0.08s, border-color 0.12s, box-shadow 0.12s;
+  transition: transform 0.10s cubic-bezier(0.4, 0, 0.2, 1), border-color 0.14s, box-shadow 0.14s;
 }
-.swatch:hover { transform: scale(1.15); border-color: var(--swatch-border-hover); }
+.swatch:hover { transform: scale(1.08); border-color: var(--swatch-border-hover); }
 .swatch.active {
   border-color: var(--gold);
   box-shadow: 0 0 0 2px rgba(216, 181, 114, 0.30);
 }
 .hex-pick {
   position: relative;
-  width: 20px;
-  height: 20px;
-  border-radius: 50%;
-  border: 1.5px dashed var(--swatch-border);
+  width: 22px;
+  height: 22px;
+  border-radius: 5px;
+  border: 2px dashed var(--swatch-border);
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -590,28 +574,51 @@ html, body {
 }
 
 /* ─────────────────── MINIMIZED PILL ─────────────────── */
+/* Layout: outer .mini is the drag region (thin border around the
+   pill) so the user can still move the collapsed toolbar. The inner
+   .mini-logo fills almost the whole pill and is the click target
+   that restores — click events on drag regions are eaten by Electron,
+   so the previous setup (whole pill draggable, tiny logo span as the
+   only click target) made restoring fragile because users couldn't
+   reliably hit the 30px logo inside the 56px pill. */
 
 .mini {
   width: 100%;
   height: 100%;
+  position: relative;
+  cursor: pointer;
+  -webkit-app-region: drag;
+}
+.mini-logo {
+  appearance: none;
+  background: transparent;
+  border: none;
+  padding: 0;
+  color: inherit;
+  font: inherit;
+  position: absolute;
+  inset: 5px;
+  -webkit-app-region: no-drag;
   display: flex;
   align-items: center;
   justify-content: center;
+  border-radius: 8px;
   cursor: pointer;
-  -webkit-app-region: drag;
-  position: relative;
+  transition: background 0.15s, transform 0.15s cubic-bezier(0.2, 0.7, 0.2, 1);
 }
-.mini::after {
-  content: '';
-  position: absolute;
-  top: 5px;
-  width: 22px;
-  height: 3px;
-  border-radius: 2px;
-  background: var(--separator);
+.mini-logo:hover {
+  background: var(--hover);
+  transform: scale(1.04);
 }
-.mini-logo { -webkit-app-region: no-drag; display: inline-flex; }
-.mini-logo svg { width: 30px; height: 30px; }
+.mini-logo:active { transform: scale(0.97); }
+.mini-logo svg,
+.mini-logo img {
+  width: 36px;
+  height: 36px;
+  border-radius: 7px;
+  object-fit: contain;
+  pointer-events: none; /* clicks land on .mini-logo, not the image */
+}
 
 /* ─────────────────── SETTINGS DROPDOWN ─────────────────── */
 
@@ -778,7 +785,7 @@ html, body {
   display: inline-flex;
   align-items: center;
 }
-.about-logo svg { width: 28px; height: 28px; }
+.about-logo svg, .about-logo img { width: 28px; height: 28px; border-radius: 6px; }
 .about-title-block {
   display: flex;
   flex-direction: column;
@@ -934,4 +941,208 @@ html, body {
     transform 0.10s cubic-bezier(0.4, 0, 0.2, 1),
     border-color 0.16s,
     box-shadow 0.16s;
+}
+
+/* ─────────────────── STATUS PANEL (permission / error) ───────────────────
+   Reuses .settings-panel for the dock + chrome; these rules style only
+   the inner content: icon + body, optional hint, action button row.
+   The 'is-reveal' modifier on the titlebar hint turns a successful-save
+   message into a clickable Reveal-in-Folder link. */
+
+.status-icon-row {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+}
+
+.status-icon {
+  flex-shrink: 0;
+  width: 32px;
+  height: 32px;
+  border-radius: 8px;
+  background: rgba(216, 181, 114, 0.18);
+  color: var(--gold);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+.status-icon svg { width: 18px; height: 18px; }
+.status-icon-error {
+  background: rgba(231, 76, 60, 0.18);
+  color: #e74c3c;
+}
+
+.status-body {
+  font-size: 11.5px;
+  line-height: 1.45;
+  color: var(--text);
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.status-hint {
+  font-size: 10.5px;
+  line-height: 1.4;
+  color: var(--hint);
+  padding: 6px 8px;
+  background: var(--group-bg);
+  border: 1px solid var(--group-border);
+  border-radius: 6px;
+}
+
+/* When the recheck probe outright threw — process is stuck until
+   relaunch. Red-tinted hint draws attention to the Relaunch button. */
+.status-hint.is-stuck {
+  color: #e74c3c;
+  background: rgba(231, 76, 60, 0.10);
+  border-color: rgba(231, 76, 60, 0.30);
+}
+
+/* Dev-mode footnote — small, italic, neutral. Disappears in packaged
+   builds where it's never relevant. */
+.status-footnote {
+  font-size: 10px;
+  line-height: 1.35;
+  color: var(--hint);
+  font-style: italic;
+  margin-top: 2px;
+}
+
+.status-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 2px;
+}
+
+.status-btn-primary {
+  background: linear-gradient(180deg, var(--gold) 0%, var(--gold-strong) 100%) !important;
+  color: var(--gold-text) !important;
+  border-color: rgba(0, 0, 0, 0.25) !important;
+  font-weight: 600;
+}
+.status-btn-primary:hover { filter: brightness(1.05); }
+
+/* Relaunch — clearly destructive-ish, dimmed so it doesn't compete
+   with the primary action but visible enough to be the escape hatch
+   when Recheck keeps reporting denied. */
+.status-btn-relaunch {
+  background: transparent !important;
+  border-color: rgba(231, 76, 60, 0.4) !important;
+  color: #e74c3c !important;
+}
+.status-btn-relaunch:hover {
+  background: rgba(231, 76, 60, 0.12) !important;
+}
+
+/* Clickable success hint in the footer — when revealPath is set the
+   message becomes a Reveal link. Gold accent + pointer cursor. */
+.bar-footer-hint.is-reveal {
+  color: var(--gold) !important;
+  cursor: pointer;
+  -webkit-app-region: no-drag;
+  pointer-events: auto;
+  text-decoration: underline;
+  text-decoration-thickness: 1px;
+  text-decoration-color: rgba(216, 181, 114, 0.5);
+  text-underline-offset: 2px;
+}
+.bar-footer-hint.is-reveal:hover {
+  text-decoration-color: var(--gold);
+}
+
+/* ─────────────────── FILE-SAVE SETTINGS ROW EXTRAS ─────────────────── */
+
+.settings-row-stack {
+  flex-direction: column;
+  align-items: stretch;
+  gap: 4px;
+}
+
+.settings-toggle-wide {
+  width: 100%;
+  justify-content: flex-start;
+}
+
+.settings-toggle.on {
+  background: rgba(216, 181, 114, 0.18);
+  color: var(--gold);
+  border-color: rgba(216, 181, 114, 0.30);
+}
+
+.settings-path {
+  font-family: "SF Mono", "JetBrains Mono", Menlo, monospace;
+  font-size: 10.5px;
+  letter-spacing: 0.01em;
+  color: var(--text);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* ─────────────────── BAR FOOTER ─────────────────── */
+/* Bottom strip in both orientations carrying the hover-hint on the
+   left and the rarely-used status-dot + settings button on the right.
+   Moved here from the titlebar so the top of the toolbar is just the
+   logo + window controls, and incidental UI (like 'what does this
+   button do?' tooltips) doesn't compete with the brand mark. */
+
+.bar-footer {
+  -webkit-app-region: drag;
+  flex-shrink: 0;
+  border-top: 1px solid var(--separator);
+  background: var(--footer-bg);
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 6px;
+}
+
+.bar-footer-hint {
+  flex: 1 1 auto;
+  min-width: 0;
+  font-size: 10.5px;
+  color: var(--hint);
+  letter-spacing: 0.01em;
+  transition: color 0.15s;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.bar-footer-hint.has-hint {
+  color: var(--hint-accent);
+  font-weight: 500;
+}
+
+.bar-footer-controls {
+  -webkit-app-region: no-drag;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  flex-shrink: 0;
+}
+.bar-footer-controls .winctl.footer-settings {
+  width: 22px;
+  height: 22px;
+}
+.bar-footer-controls .winctl.footer-settings svg { width: 13px; height: 13px; }
+
+/* Vertical-mode footer needs to stack — the bar is 88px wide which
+   isn't enough room for hint text alongside two buttons in a row. */
+.bar[data-orient='v'] .bar-footer {
+  flex-direction: column;
+  gap: 4px;
+  padding: 6px 4px;
+}
+.bar[data-orient='v'] .bar-footer-hint {
+  white-space: normal;
+  text-align: center;
+  line-height: 1.2;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  font-size: 10px;
+}
+.bar[data-orient='v'] .bar-footer-controls {
+  justify-content: center;
 }

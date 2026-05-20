@@ -27,6 +27,13 @@ export interface HubState {
   settingsOpen: boolean;
   thicknessFlyoutOpen: boolean;
   perToolWidth: PerToolWidth;
+  saveDir: string | null;
+  alwaysAskSavePath: boolean;
+  // Whether the renderer is currently showing the status side panel
+  // (permission / save error). Transient — never persisted. Tracked
+  // in hub so main can grow the toolbar window to fit, the same way
+  // it does for settingsOpen.
+  statusPanelOpen: boolean;
 }
 
 const state: HubState = {
@@ -42,6 +49,9 @@ const state: HubState = {
   settingsOpen: false,
   thicknessFlyoutOpen: false,
   perToolWidth: { pencil: 3, pen: 4, eraser: 20, highlighter: 18 },
+  saveDir: null,
+  alwaysAskSavePath: false,
+  statusPanelOpen: false,
 };
 
 const subscribers = new Set<BrowserWindow>();
@@ -100,6 +110,10 @@ export function hydrateFromPersistence(): void {
     highlighter: typeof storedW.highlighter === 'number' ? storedW.highlighter : PERSISTED_DEFAULTS.perToolWidth.highlighter,
   };
   state.activeTool = VALID_TOOLS.has(p.activeTool) ? p.activeTool : 'pencil';
+  // Save destination: null until the user picks one. Schema-tolerant —
+  // older installs without this key fall through to the default.
+  state.saveDir = typeof p.saveDir === 'string' ? p.saveDir : null;
+  state.alwaysAskSavePath = typeof p.alwaysAskSavePath === 'boolean' ? p.alwaysAskSavePath : false;
   // If the active tool is pencil, the canonical color is graphite —
   // don't restore a stray non-graphite value from a previous session.
   const colorForTool =
@@ -243,6 +257,33 @@ export function patch(update: HubStateUpdate) {
     state.thicknessFlyoutOpen = update.thicknessFlyoutOpen;
     changed.add('thicknessFlyoutOpen');
     if (state.thicknessFlyoutOpen && state.settingsOpen) {
+      state.settingsOpen = false;
+      changed.add('settingsOpen');
+    }
+  }
+  if (update.saveDir !== undefined && update.saveDir !== state.saveDir) {
+    state.saveDir = update.saveDir;
+    changed.add('saveDir');
+    save('saveDir', state.saveDir);
+  }
+  if (
+    update.alwaysAskSavePath !== undefined &&
+    update.alwaysAskSavePath !== state.alwaysAskSavePath
+  ) {
+    state.alwaysAskSavePath = update.alwaysAskSavePath;
+    changed.add('alwaysAskSavePath');
+    save('alwaysAskSavePath', state.alwaysAskSavePath);
+  }
+  if (
+    update.statusPanelOpen !== undefined &&
+    update.statusPanelOpen !== state.statusPanelOpen
+  ) {
+    state.statusPanelOpen = update.statusPanelOpen;
+    changed.add('statusPanelOpen');
+    // Status panel and settings are mutually exclusive panels in the
+    // same dock slot — opening one closes the other so the renderer
+    // and main agree on what's showing.
+    if (state.statusPanelOpen && state.settingsOpen) {
       state.settingsOpen = false;
       changed.add('settingsOpen');
     }

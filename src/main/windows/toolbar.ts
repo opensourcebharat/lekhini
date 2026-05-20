@@ -13,7 +13,9 @@ let toolbar: BrowserWindow | null = null;
 // of drifting inward each open/close cycle.
 let anchorPos: { x: number; y: number } | null = null;
 
-const MIN_SIZE = { w: 56, h: 56 };
+// Collapsed pill: square enough to be a chunky tap target and big
+// enough that a 36px logo with a 5px drag border breathes.
+const MIN_SIZE = { w: 64, h: 64 };
 
 function defaultPosition(orientation: Orientation, minimized: boolean, settingsOpen: boolean) {
   const primary = screen.getPrimaryDisplay();
@@ -65,6 +67,13 @@ export function createToolbar(orientation: Orientation = 'h'): BrowserWindow {
 
   toolbar.setAlwaysOnTop(true, 'screen-saver', 2);
   toolbar.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true });
+  // Hide the toolbar from screen capture so the screenshot the user
+  // takes via Lekhini contains the underlying app + their annotations
+  // but NOT our toolbar chrome. macOS uses NSWindowSharingNone;
+  // Windows uses SetWindowDisplayAffinity(WDA_EXCLUDEFROMCAPTURE);
+  // Linux is no-op. Also keeps the toolbar out of any other capture
+  // tool the user runs (Loom, QuickTime, Zoom share, etc.).
+  toolbar.setContentProtection(true);
 
   if (VITE_DEV_SERVER_URL) {
     toolbar.loadURL(`${VITE_DEV_SERVER_URL}src/renderer/toolbar/index.html`);
@@ -170,6 +179,10 @@ export function registerToolbarIpc() {
   ipcMain.handle('app:info', () => ({
     name: app.getName(),
     version: app.getVersion(),
+    // isPackaged is the canonical Electron check for production vs
+    // dev-server run. Surfaced so the renderer can flag dev-mode TCC
+    // quirks (which are normal in dev but absent in packaged builds).
+    packaged: app.isPackaged,
   }));
   // Renderer reports its desired content height (vertical) or width
   // (horizontal). Main resizes the window to fit so empty space below

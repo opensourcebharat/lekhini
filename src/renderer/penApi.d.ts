@@ -1,4 +1,4 @@
-import type { HubStateUpdate } from '../shared/types';
+import type { HubStateUpdate, ScreenPermissionStatus } from '../shared/types';
 
 declare global {
   interface Window {
@@ -12,10 +12,10 @@ declare global {
         onUndo(cb: () => void): () => void;
         onRedo(cb: () => void): () => void;
         onClear(cb: () => void): () => void;
-        onScreenshot(cb: (payload: { dataUrl: string }) => void): () => void;
+        onScreenshot(cb: (payload: { png: Uint8Array }) => void): () => void;
         onSnip(
           cb: (payload: {
-            dataUrl: string;
+            png: Uint8Array;
             rect: { x: number; y: number; w: number; h: number };
             scaleFactor: number;
           }) => void,
@@ -25,8 +25,8 @@ declare global {
         ): () => void;
         requestFocus(): Promise<void>;
         releaseFocus(): Promise<void>;
-        sendScreenshotResult(pngBase64: string): Promise<void>;
-        sendSnipResult(pngBase64: string): Promise<void>;
+        sendScreenshotResult(png: Uint8Array): Promise<void>;
+        sendSnipResult(png: Uint8Array): Promise<void>;
       };
       snip: {
         set(payload: {
@@ -50,11 +50,29 @@ declare global {
         setContentSize(payload: { axis: 'h' | 'v'; size: number }): Promise<void>;
       };
       permissions: {
-        check(): Promise<{ screen: string; accessibility: boolean }>;
+        check(): Promise<{ screen: ScreenPermissionStatus; accessibility: boolean }>;
+        deepCheck(): Promise<{ screen: ScreenPermissionStatus; probeError: boolean }>;
         open(which: 'screen' | 'accessibility'): Promise<void>;
+        onNeeded(cb: (payload: { reason: 'screen' }) => void): () => void;
+        onStatus(
+          cb: (payload: { screen: ScreenPermissionStatus; probeError?: boolean }) => void,
+        ): () => void;
+      };
+      capture: {
+        onSaved(cb: (payload: { path: string }) => void): () => void;
+        onError(
+          cb: (payload: { message: string; recoverable: boolean }) => void,
+        ): () => void;
+      };
+      settings: {
+        pickSaveDir(): Promise<string | null>;
+      };
+      shell: {
+        openPath(p: string): Promise<void>;
       };
       app: {
-        info(): Promise<{ name: string; version: string }>;
+        info(): Promise<{ name: string; version: string; packaged: boolean }>;
+        relaunch(): Promise<void>;
       };
       env: {
         displayId(): number;

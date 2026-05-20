@@ -13,13 +13,13 @@ export class CommittedLayer {
     const ctx = canvas.getContext('2d', { alpha: true });
     if (!ctx) throw new Error('CommittedLayer: 2D context unavailable');
     this.ctx = ctx;
-    this.dpr = window.devicePixelRatio || 1;
+    this.dpr = Math.max(window.devicePixelRatio || 1, 2);
     this.resize();
   }
 
   resize(): void {
     const { innerWidth: w, innerHeight: h } = window;
-    this.dpr = window.devicePixelRatio || 1;
+    this.dpr = Math.max(window.devicePixelRatio || 1, 2);
     this.canvas.width = Math.floor(w * this.dpr);
     this.canvas.height = Math.floor(h * this.dpr);
     this.canvas.style.width = `${w}px`;

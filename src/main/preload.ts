@@ -16,11 +16,11 @@ const api = {
     onUndo: (cb: () => void) => bind('overlay:undo', cb),
     onRedo: (cb: () => void) => bind('overlay:redo', cb),
     onClear: (cb: () => void) => bind('overlay:clear', cb),
-    onScreenshot: (cb: (payload: { dataUrl: string }) => void) =>
+    onScreenshot: (cb: (payload: { png: Uint8Array }) => void) =>
       bind('overlay:screenshot', cb as (v: unknown) => void),
     onSnip: (
       cb: (payload: {
-        dataUrl: string;
+        png: Uint8Array;
         rect: { x: number; y: number; w: number; h: number };
         scaleFactor: number;
       }) => void,
@@ -30,10 +30,10 @@ const api = {
     ) => bind('overlay:snip-selection', cb as (v: unknown) => void),
     requestFocus: () => ipcRenderer.invoke('overlay:request-focus' satisfies IpcChannel),
     releaseFocus: () => ipcRenderer.invoke('overlay:release-focus' satisfies IpcChannel),
-    sendScreenshotResult: (pngBase64: string) =>
-      ipcRenderer.invoke('capture:screenshot:result' satisfies IpcChannel, pngBase64),
-    sendSnipResult: (pngBase64: string) =>
-      ipcRenderer.invoke('capture:snip:result' satisfies IpcChannel, pngBase64),
+    sendScreenshotResult: (png: Uint8Array) =>
+      ipcRenderer.invoke('capture:screenshot:result' satisfies IpcChannel, png),
+    sendSnipResult: (png: Uint8Array) =>
+      ipcRenderer.invoke('capture:snip:result' satisfies IpcChannel, png),
   },
   snip: {
     set: (payload: {
@@ -61,8 +61,35 @@ const api = {
   },
   permissions: {
     check: () => ipcRenderer.invoke('permissions:check' satisfies IpcChannel),
+    deepCheck: () => ipcRenderer.invoke('permissions:deep-recheck' satisfies IpcChannel),
     open: (which: 'screen' | 'accessibility') =>
       ipcRenderer.invoke('permissions:open' satisfies IpcChannel, which),
+    onNeeded: (cb: (payload: { reason: 'screen' }) => void) =>
+      bind('permissions:needed', cb as (v: unknown) => void),
+    onStatus: (
+      cb: (payload: {
+        screen: 'granted' | 'denied' | 'not-determined' | 'restricted' | 'unknown';
+        probeError?: boolean;
+      }) => void,
+    ) => bind('permissions:status', cb as (v: unknown) => void),
+  },
+  capture: {
+    onSaved: (cb: (payload: { path: string }) => void) =>
+      bind('capture:saved', cb as (v: unknown) => void),
+    onError: (cb: (payload: { message: string; recoverable: boolean }) => void) =>
+      bind('capture:error', cb as (v: unknown) => void),
+  },
+  settings: {
+    // saveDir + alwaysAskSavePath are part of HubState — write them
+    // via `pen.hub.update({ saveDir, alwaysAskSavePath })`. This
+    // method only opens the OS folder-picker dialog and returns the
+    // chosen path so the renderer can patch the hub with it.
+    pickSaveDir: () =>
+      ipcRenderer.invoke('settings:save-dir:pick' satisfies IpcChannel) as Promise<string | null>,
+  },
+  shell: {
+    openPath: (p: string) =>
+      ipcRenderer.invoke('shell:open-path' satisfies IpcChannel, p),
   },
   app: {
     info: () =>
@@ -70,6 +97,7 @@ const api = {
         name: string;
         version: string;
       }>,
+    relaunch: () => ipcRenderer.invoke('app:relaunch' satisfies IpcChannel),
   },
   env: {
     displayId: () => ipcRenderer.sendSync('overlay:display-id'),

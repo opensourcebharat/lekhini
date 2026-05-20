@@ -18,7 +18,7 @@
     "resolveJsonModule": true,
     "forceConsistentCasingInFileNames": true,
     "verbatimModuleSyntax": false,
-    "types": ["node"],
+    "types": ["node", "vite/client"],
     "baseUrl": ".",
     "paths": {
       "@shared/*": ["src/shared/*"],

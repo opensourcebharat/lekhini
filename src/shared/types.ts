@@ -64,6 +64,10 @@ export interface RegionShape {
   p2: { x: number; y: number };
   color: string;
   opacity: number;
+  // When set, render with the high-contrast B/W marching-ants pattern
+  // used for selection rectangles (snip preview). Without it the
+  // 1px-dashed white stroke is invisible against most desktops.
+  marchingAnts?: boolean;
 }
 
 export interface EllipseShape {
@@ -137,6 +141,13 @@ export type HubStateUpdate = {
   settingsOpen?: boolean;
   thicknessFlyoutOpen?: boolean;
   perToolWidth?: Partial<PerToolWidth>;
+  saveDir?: string | null;
+  alwaysAskSavePath?: boolean;
+  // Transient — not persisted. Mirrors whether the renderer is
+  // showing the status side panel (permission / save error) so
+  // main can resize the toolbar window to fit it, the same way it
+  // does for settingsOpen.
+  statusPanelOpen?: boolean;
 };
 
 export type IpcChannel =
@@ -154,6 +165,8 @@ export type IpcChannel =
   | 'capture:screenshot:result'
   | 'capture:snip:result'
   | 'capture:trigger'
+  | 'capture:saved'
+  | 'capture:error'
   | 'snip:set'
   | 'snip:clear'
   | 'snip:copy'
@@ -167,4 +180,36 @@ export type IpcChannel =
   | 'toolbar:set-content-size'
   | 'app:info'
   | 'permissions:check'
-  | 'permissions:open';
+  | 'permissions:open'
+  | 'permissions:needed'
+  | 'permissions:status'
+  | 'permissions:deep-recheck'
+  | 'app:relaunch'
+  | 'settings:save-dir:pick'
+  | 'shell:open-path';
+
+export interface CaptureSaved {
+  path: string;
+}
+
+export interface CaptureError {
+  message: string;
+  recoverable: boolean;
+}
+
+export type PermissionReason = 'screen';
+
+export interface PermissionNeeded {
+  reason: PermissionReason;
+}
+
+export type ScreenPermissionStatus =
+  | 'granted'
+  | 'denied'
+  | 'not-determined'
+  | 'restricted'
+  | 'unknown';
+
+export interface PermissionStatus {
+  screen: ScreenPermissionStatus;
+}

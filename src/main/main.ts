@@ -59,10 +59,18 @@ app.whenReady().then(async () => {
       registerEscapeWhileDrawing(state.drawMode);
       registerDrawingHotkeys(state.drawMode);
     }
+    // The status panel (permission / save error) occupies the same
+    // dock slot as Settings in the toolbar, so we treat either being
+    // open as "the side panel is showing" for window-resize purposes.
+    const sidePanelOpen = state.settingsOpen || state.statusPanelOpen;
     if (changed.has('orientation')) {
-      resizeToolbar(state.orientation, state.minimized, state.settingsOpen, 'default');
-    } else if (changed.has('minimized') || changed.has('settingsOpen')) {
-      resizeToolbar(state.orientation, state.minimized, state.settingsOpen, 'keep');
+      resizeToolbar(state.orientation, state.minimized, sidePanelOpen, 'default');
+    } else if (
+      changed.has('minimized') ||
+      changed.has('settingsOpen') ||
+      changed.has('statusPanelOpen')
+    ) {
+      resizeToolbar(state.orientation, state.minimized, sidePanelOpen, 'keep');
     }
   });
 
