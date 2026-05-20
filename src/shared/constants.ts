@@ -7,7 +7,7 @@ export const GRAPHITE_COLOR = '#3a3a3c';
 
 export const DEFAULT_SETTINGS: ToolSettings = {
   color: GRAPHITE_COLOR,
-  width: 3,
+  width: 2,
   opacity: 1,
 };
 
@@ -81,7 +81,7 @@ export const THICKNESS_PRESETS: Record<
   'pencil' | 'pen' | 'eraser' | 'highlighter',
   number[]
 > = {
-  pencil: [1, 2, 3, 5, 8],
+  pencil: [0.5, 1, 2, 3, 6],
   pen: [2, 4, 8, 14, 22],
   eraser: [10, 18, 28, 44, 64],
   highlighter: [12, 18, 26, 34, 44],

@@ -410,7 +410,7 @@ html, body {
 .bar[data-orient='v'] .tools-zone,
 .bar[data-orient='v'] .actions-zone {
   display: grid;
-  grid-template-columns: repeat(2, 30px);
+  grid-template-columns: repeat(2, 26px);
   gap: 4px;
   background: var(--group-bg);
   border: 1px solid var(--group-border);
@@ -449,9 +449,9 @@ html, body {
   background: transparent;
   color: var(--text);
   border: 1px solid transparent;
-  border-radius: 6px;
-  width: 30px;
-  height: 30px;
+  border-radius: 7px;
+  width: 26px;
+  height: 26px;
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -486,7 +486,7 @@ html, body {
   color: var(--gold);
   opacity: 1;
 }
-.tool-btn svg, .action-btn svg { width: 19px; height: 19px; }
+.tool-btn svg, .action-btn svg { width: 18px; height: 18px; }
 
 /* ─────────────────── PINNED COLOR / WIDTH ─────────────────── */
 
@@ -500,26 +500,26 @@ html, body {
   gap: 12px;
 }
 
-.swatches { display: flex; gap: 5px; align-items: center; }
+.swatches { display: flex; gap: 6px; align-items: center; }
 .swatch {
-  width: 18px;
-  height: 18px;
-  border-radius: 50%;
-  border: 1.5px solid var(--swatch-border);
+  width: 22px;
+  height: 22px;
+  border-radius: 5px;
+  border: 2px solid var(--swatch-border);
   cursor: pointer;
-  transition: transform 0.08s, border-color 0.12s, box-shadow 0.12s;
+  transition: transform 0.10s cubic-bezier(0.4, 0, 0.2, 1), border-color 0.14s, box-shadow 0.14s;
 }
-.swatch:hover { transform: scale(1.15); border-color: var(--swatch-border-hover); }
+.swatch:hover { transform: scale(1.08); border-color: var(--swatch-border-hover); }
 .swatch.active {
   border-color: var(--gold);
   box-shadow: 0 0 0 2px rgba(216, 181, 114, 0.30);
 }
 .hex-pick {
   position: relative;
-  width: 20px;
-  height: 20px;
-  border-radius: 50%;
-  border: 1.5px dashed var(--swatch-border);
+  width: 22px;
+  height: 22px;
+  border-radius: 5px;
+  border: 2px dashed var(--swatch-border);
   display: inline-flex;
   align-items: center;
   justify-content: center;

@@ -13,13 +13,21 @@ export class LiveLayer {
     const ctx = canvas.getContext('2d', { alpha: true });
     if (!ctx) throw new Error('LiveLayer: 2D context unavailable');
     this.ctx = ctx;
-    this.dpr = window.devicePixelRatio || 1;
+    // Floor at 2× so strokes stay crisp on standard-DPI external monitors
+    // (classroom IFPs are commonly 96 DPI / DPR 1) without ever downscaling
+    // a true Retina or higher display. ~4× canvas memory vs DPR=1, which
+    // is fine for one full-screen overlay.
+    this.dpr = Math.max(window.devicePixelRatio || 1, 2);
     this.resize();
   }
 
   resize(): void {
     const { innerWidth: w, innerHeight: h } = window;
-    this.dpr = window.devicePixelRatio || 1;
+    // Floor at 2× so strokes stay crisp on standard-DPI external monitors
+    // (classroom IFPs are commonly 96 DPI / DPR 1) without ever downscaling
+    // a true Retina or higher display. ~4× canvas memory vs DPR=1, which
+    // is fine for one full-screen overlay.
+    this.dpr = Math.max(window.devicePixelRatio || 1, 2);
     this.canvas.width = Math.floor(w * this.dpr);
     this.canvas.height = Math.floor(h * this.dpr);
     this.canvas.style.width = `${w}px`;

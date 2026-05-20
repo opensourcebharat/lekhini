@@ -16,7 +16,7 @@ export const PERSISTED_DEFAULTS: PersistedState = {
   orientation: 'v',
   theme: 'dark',
   profile: 'general',
-  perToolWidth: { pencil: 3, pen: 4, eraser: 20, highlighter: 18 },
+  perToolWidth: { pencil: 2, pen: 4, eraser: 20, highlighter: 18 },
   color: GRAPHITE_COLOR,
   activeTool: 'pencil',
 };
