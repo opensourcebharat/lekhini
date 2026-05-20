@@ -333,7 +333,17 @@ export function ToolbarApp() {
     void s.profile;
     void s.activeTool;
     void panelKind();
-    requestAnimationFrame(reportContentSize);
+    // First RAF catches the common case (single-frame layout). A
+    // second RAF after it covers transitions where the bar-main was
+    // just unmounted-then-remounted (notably restore from
+    // minimized) — children sometimes need an extra frame to lay out
+    // their final size, and without this the footer would render
+    // clipped below the window's content-size until the next
+    // unrelated re-measure.
+    requestAnimationFrame(() => {
+      reportContentSize();
+      requestAnimationFrame(reportContentSize);
+    });
   });
 
   // Refresh which side the panel sits on whenever a status panel opens

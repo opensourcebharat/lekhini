@@ -23,17 +23,21 @@ export const SNAP_ANGLES_DEG = [0, 15, 30, 45, 60, 75, 90, 105, 120, 135, 150, 1
 
 // Initial sizes for the toolbar window. The renderer reports its
 // actual content size after mount and the window resizes to fit — so
-// these values just need to be a reasonable first-paint estimate
-// close to typical content size, minimizing the brief flicker before
-// dynamic resize lands.
+// these values just need to be a generous first-paint estimate close
+// to typical content size, minimizing flicker before dynamic resize
+// lands. CRITICAL: must be ≥ actual content height including the
+// bottom footer, otherwise the footer is clipped below the visible
+// window edge until the next state change triggers a remeasure.
+// That's what bit users when they restored from the collapsed pill.
 //
-// h.w is sized to fit teacher profile (11 tools) + actions + the
-// inline color grid + right margin. h.h matches the typical bar
-// height when the inline color grid is in place (it's taller than
-// the icons row alone since the grid is 3 rows).
+// Rough budget per orientation (sum to current values with margin):
+//   h: titlebar 28 + tools row 56 + footer 28 + borders 2 = ~114
+//      → 140 leaves slack for taller tool rows
+//   v: v-controls 32 + v-brand 52 + tools ~280 + pinned ~96 +
+//      footer 52 + borders 2 = ~514 → 560 with slack
 export const TOOLBAR_SIZES = {
-  h: { w: 740, h: 102 },
-  v: { w: 88, h: 480 },
+  h: { w: 740, h: 140 },
+  v: { w: 88, h: 560 },
 };
 
 // Extra space added when the settings dropdown is open.

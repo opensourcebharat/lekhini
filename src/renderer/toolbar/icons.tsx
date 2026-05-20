@@ -23,20 +23,34 @@ const SVG = (children: JSX.Element): JSX.Element => (
 );
 
 export const Icons = {
-  // PencilSimple — tilted shaft with a flat tip. No ferrule clutter.
+  // Pencil — tilted body with a filled eraser cap on the wide end
+  // and a ferrule line. The eraser cap is the visual signature that
+  // tells it apart from the pen at a glance.
   pencil: () =>
     SVG(
       <>
         <path d="M14.5 5.5l4 4L8 20H4v-4z" />
         <path d="M13 7l4 4" />
+        <path
+          d="M16 3l4 4-1.5 1.5-4-4z"
+          fill="currentColor"
+          stroke="none"
+        />
       </>,
     ),
-  // Pen — angled barrel with a small nib square at the tip.
+  // Pen — slightly thicker tilted barrel with a FILLED triangular
+  // nib protruding at the writing tip. The filled nib is the
+  // signature that distinguishes it from the (eraser-capped) pencil.
   pen: () =>
     SVG(
       <>
-        <path d="M16 4l4 4L9 19l-5 1 1-5z" />
-        <path d="M14 6l4 4" />
+        <path d="M17 4l3 3L9 18l-5 2 2-5z" />
+        <path d="M15 6l3 3" />
+        <path
+          d="M4 20l3-3 0 3z"
+          fill="currentColor"
+          stroke="none"
+        />
       </>,
     ),
   // Highlighter — square chisel head over a tapered shaft.
