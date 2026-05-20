@@ -1,0 +1,11 @@
+blank_issues_enabled: false
+contact_links:
+  - name: Questions & general discussion
+    url: https://github.com/opensourcebharat/lekhini/discussions
+    about: For usage questions, ideas, and conversations that are not bugs or concrete feature requests.
+  - name: Security vulnerability
+    url: https://github.com/opensourcebharat/lekhini/security/advisories/new
+    about: Report security issues privately via GitHub — do NOT open a public issue. See SECURITY.md.
+  - name: Code of Conduct
+    url: https://github.com/opensourcebharat/lekhini/blob/main/CODE_OF_CONDUCT.md
+    about: Read the Code of Conduct, or email conduct@opensourcebharat.org to report a violation.

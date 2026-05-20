@@ -1,0 +1,64 @@
+appId: org.opensourcebharat.lekhini
+productName: Lekhini
+copyright: Copyright © 2026 Open Source Bharat — https://opensourcebharat.org
+asar: true
+
+directories:
+  output: release
+  buildResources: build
+
+files:
+  - dist
+  - dist-electron
+  - package.json
+
+mac:
+  category: public.app-category.productivity
+  target:
+    - target: dmg
+      arch:
+        - arm64
+        - x64
+  hardenedRuntime: true
+  gatekeeperAssess: false
+  entitlements: build/entitlements.mac.plist
+  entitlementsInherit: build/entitlements.mac.plist
+  extendInfo:
+    NSScreenCaptureUsageDescription: Lekhini captures the screen only when you save an annotated screenshot.
+    NSAccessibilityUsageDescription: Lekhini uses Accessibility to register global hotkeys (e.g., toggle draw mode) while other apps are focused.
+
+dmg:
+  sign: false
+  contents:
+    - x: 130
+      y: 220
+    - x: 410
+      y: 220
+      type: link
+      path: /Applications
+
+win:
+  target:
+    - target: nsis
+      arch:
+        - x64
+        - arm64
+  signingHashAlgorithms:
+    - sha256
+  publisherName: Open Source Bharat
+
+nsis:
+  oneClick: false
+  perMachine: false
+  allowToChangeInstallationDirectory: true
+  createDesktopShortcut: true
+  createStartMenuShortcut: true
+  shortcutName: Lekhini
+
+linux:
+  category: Graphics
+  target:
+    - target: AppImage
+      arch:
+        - x64
+        - arm64

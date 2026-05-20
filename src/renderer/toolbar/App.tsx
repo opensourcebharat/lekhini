@@ -1,0 +1,717 @@
+import { createEffect, createMemo, createSignal, For, onMount, onCleanup, Show } from 'solid-js';
+import { COLOR_PRESETS, THICKNESS_PRESETS } from '../../shared/constants';
+import { PROFILES, PROFILE_ORDER } from '../../shared/profiles';
+import type {
+  Orientation,
+  ProfileId,
+  Theme,
+  ToolId,
+  ToolSettings,
+  Whiteboard,
+} from '../../shared/types';
+import { Icons, Logo } from './icons';
+
+interface HubSnapshot {
+  activeTool: ToolId;
+  drawMode: boolean;
+  settings: ToolSettings;
+  orientation: Orientation;
+  minimized: boolean;
+  whiteboard: Whiteboard;
+  theme: Theme;
+  profile: ProfileId;
+  settingsOpen: boolean;
+  thicknessFlyoutOpen: boolean;
+  perToolWidth: { pencil: number; pen: number; eraser: number; highlighter: number };
+}
+
+type FlyoutTool = 'pencil' | 'pen' | 'eraser' | 'highlighter';
+const FLYOUT_TOOLS = new Set<ToolId>(['pencil', 'pen', 'eraser', 'highlighter']);
+const isFlyoutTool = (id: ToolId): id is FlyoutTool => FLYOUT_TOOLS.has(id);
+
+interface ToolDef {
+  id: ToolId;
+  label: string;
+  hint: string;
+  icon: () => ReturnType<(typeof Icons)['pen']>;
+}
+
+const ALL_TOOLS: ToolDef[] = [
+  { id: 'pencil',      label: 'Pencil',      hint: 'Q',          icon: Icons.pencil },
+  { id: 'pen',         label: 'Pen',         hint: 'P',          icon: Icons.pen },
+  { id: 'eraser',      label: 'Eraser',      hint: 'E',          icon: Icons.eraser },
+  { id: 'hand',        label: 'Hand (move)', hint: 'M',          icon: Icons.hand },
+  { id: 'highlighter', label: 'Highlighter', hint: 'H',          icon: Icons.highlighter },
+  { id: 'line',        label: 'H/V Line',    hint: 'L',          icon: Icons.line },
+  { id: 'trendline',   label: 'Trendline',   hint: 'T · ⇧ snap', icon: Icons.trendline },
+  { id: 'arrow',       label: 'Arrow',       hint: 'A',          icon: Icons.arrow },
+  { id: 'text',        label: 'Text',        hint: 'X',          icon: Icons.text },
+  { id: 'region',      label: 'Rectangle',   hint: 'R',          icon: Icons.region },
+  { id: 'ellipse',     label: 'Ellipse',     hint: 'O',          icon: Icons.ellipse },
+  { id: 'fib',         label: 'Fibonacci',   hint: 'F',          icon: Icons.fib },
+  { id: 'snip',        label: 'Snip',        hint: 'C · ⇧ save', icon: Icons.snip },
+];
+
+const TOOL_BY_ID: Record<ToolId, ToolDef> = ALL_TOOLS.reduce(
+  (acc, t) => {
+    acc[t.id] = t;
+    return acc;
+  },
+  {} as Record<ToolId, ToolDef>,
+);
+
+export function ToolbarApp() {
+  const [hub, setHub] = createSignal<HubSnapshot>({
+    activeTool: 'pencil',
+    drawMode: false,
+    settings: { color: '#3a3a3c', width: 3, opacity: 1 },
+    orientation: 'v',
+    minimized: false,
+    whiteboard: 'off',
+    theme: 'dark',
+    profile: 'general',
+    settingsOpen: false,
+    thicknessFlyoutOpen: false,
+    perToolWidth: { pencil: 3, pen: 4, eraser: 20, highlighter: 18 },
+  });
+  const [platform, setPlatform] = createSignal<NodeJS.Platform>('darwin');
+  const [hint, setHint] = createSignal<string>('');
+  const [settingsOnLeft, setSettingsOnLeft] = createSignal(false);
+  const [appInfo, setAppInfo] = createSignal<{ name: string; version: string }>({
+    name: 'Lekhini',
+    version: '1.0.0',
+  });
+  let scrollRef: HTMLDivElement | undefined;
+  let barMainRef: HTMLDivElement | undefined;
+
+  onMount(() => {
+    void window.pen.hub.get().then((state) => {
+      const s = state as HubSnapshot;
+      setHub(s);
+      if (s.settingsOpen) refreshSide();
+    });
+    void window.pen.win.platform().then(setPlatform);
+    void window.pen.app.info().then(setAppInfo);
+    const off = window.pen.hub.onBroadcast((state) => {
+      const s = state as HubSnapshot;
+      setHub(s);
+      // Re-evaluate which side the settings panel should sit on whenever the
+      // toolbar bounds may have shifted (orientation/minimize/settingsOpen).
+      if (s.settingsOpen) refreshSide();
+    });
+    onCleanup(off);
+
+    const el = scrollRef;
+    if (!el) return;
+
+    let isDown = false;
+    let moved = 0;
+    let startY = 0;
+    let startScroll = 0;
+    const onDown = (e: PointerEvent) => {
+      const target = e.target as HTMLElement;
+      if (target.closest('button, input, .swatch, .hex-pick')) return;
+      isDown = true;
+      moved = 0;
+      startY = e.clientY;
+      startScroll = el.scrollTop;
+      el.setPointerCapture(e.pointerId);
+      el.style.cursor = 'grabbing';
+    };
+    const onMove = (e: PointerEvent) => {
+      if (!isDown) return;
+      const dy = e.clientY - startY;
+      moved = Math.max(moved, Math.abs(dy));
+      el.scrollTop = startScroll - dy;
+    };
+    const onUp = (e: PointerEvent) => {
+      if (!isDown) return;
+      isDown = false;
+      try { el.releasePointerCapture(e.pointerId); } catch { /* ignore */ }
+      el.style.cursor = '';
+      if (moved > 4) e.preventDefault();
+    };
+    el.addEventListener('pointerdown', onDown);
+    el.addEventListener('pointermove', onMove);
+    el.addEventListener('pointerup', onUp);
+
+    // Close the thickness flyout on Esc or any click outside its chips/buttons.
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape' && hub().thicknessFlyoutOpen) closeFlyout();
+    };
+    const onDocDown = (e: PointerEvent) => {
+      if (!hub().thicknessFlyoutOpen) return;
+      const t = e.target as HTMLElement | null;
+      if (!t) return;
+      // Don't dismiss when the click landed on the popup, the thickness
+      // trigger button, or any tool button (tool change closes the popup
+      // on its own anyway).
+      if (t.closest('.thickness-popup, .thickness-trigger, .tool-btn')) return;
+      closeFlyout();
+    };
+    window.addEventListener('keydown', onKey);
+    window.addEventListener('pointerdown', onDocDown, true);
+
+    onCleanup(() => {
+      el.removeEventListener('pointerdown', onDown);
+      el.removeEventListener('pointermove', onMove);
+      el.removeEventListener('pointerup', onUp);
+      window.removeEventListener('keydown', onKey);
+      window.removeEventListener('pointerdown', onDocDown, true);
+    });
+  });
+
+  // Adapt the toolbar window height to its content. bar-main is
+  // content-sized, so we sum each child's natural height (using
+  // scrollHeight for scroll-area). When the settings panel is open we
+  // include it too — stacked vertically in h-mode (column flex bar),
+  // side-by-side in v-mode (row flex bar, so we take the taller side).
+  let lastReported = 0;
+  const reportContentSize = () => {
+    if (!barMainRef) return;
+    const s = hub();
+    if (s.minimized) return;
+
+    let barMainHeight = 0;
+    for (const child of Array.from(barMainRef.children)) {
+      const el = child as HTMLElement;
+      const isScroll = el.classList.contains('scroll-area');
+      // scroll-area's clientHeight can track the window allotment, so
+      // use scrollHeight to get the natural content height.
+      barMainHeight += isScroll ? el.scrollHeight : el.offsetHeight;
+    }
+
+    let target = barMainHeight;
+    if (s.settingsOpen) {
+      const settingsPanel = barMainRef.parentElement?.querySelector(
+        '.settings-panel',
+      ) as HTMLElement | null;
+      if (settingsPanel) {
+        const settingsHeight = settingsPanel.scrollHeight;
+        target =
+          s.orientation === 'h'
+            ? barMainHeight + settingsHeight
+            : Math.max(barMainHeight, settingsHeight);
+      }
+    }
+    // 2px for the bar's 1px border on each side.
+    target += 2;
+    if (target === lastReported || target < 60) return;
+    lastReported = target;
+    void window.pen.win.setContentSize({ axis: 'v', size: target });
+  };
+
+  // Re-measure after the DOM has settled following any state change that
+  // affects content size. RAF defers to after Solid flushes its updates.
+  createEffect(() => {
+    const s = hub();
+    // Reading these fields explicitly tracks them.
+    void s.orientation;
+    void s.minimized;
+    void s.settingsOpen;
+    void s.thicknessFlyoutOpen;
+    void s.profile;
+    void s.activeTool;
+    requestAnimationFrame(reportContentSize);
+  });
+
+  // Whenever a side panel flips open, ask main which side of the screen
+  // we're on so we can render the panel on the correct side in vertical mode.
+  const refreshSide = () => {
+    void window.pen.win.toolbarOnRightSide().then(setSettingsOnLeft);
+  };
+  const closeFlyout = () =>
+    void window.pen.hub.update({ thicknessFlyoutOpen: false });
+  const setTool = (id: ToolId) => {
+    const s = hub();
+    if (s.activeTool === id) {
+      // Re-clicking the active tool toggles drawMode — gives the user
+      // a fast way back to idle without hunting for the status dot.
+      // Thickness selection is no longer tied to tool clicks; it lives
+      // in its own button.
+      void window.pen.hub.update({
+        drawMode: !s.drawMode,
+        thicknessFlyoutOpen: false,
+      });
+    } else {
+      void window.pen.hub.update({
+        activeTool: id,
+        drawMode: true,
+        thicknessFlyoutOpen: false,
+      });
+    }
+  };
+  const setColor = (c: string) => void window.pen.hub.update({ settings: { color: c } });
+  const pickThickness = (n: number) =>
+    void window.pen.hub.update({ settings: { width: n } });
+  const toggleThickness = () => {
+    if (!isFlyoutTool(hub().activeTool)) return;
+    void window.pen.hub.update({ thicknessFlyoutOpen: !hub().thicknessFlyoutOpen });
+  };
+  const toggleDraw = () => void window.pen.hub.update({ drawMode: !hub().drawMode });
+  const toggleOrient = () =>
+    void window.pen.hub.update({ orientation: hub().orientation === 'h' ? 'v' : 'h' });
+  const minimize = () => void window.pen.hub.update({ minimized: true });
+  const restore = () => void window.pen.hub.update({ minimized: false });
+  const closeApp = () => void window.pen.win.close();
+  const cycleBoard = () => {
+    const next: Whiteboard =
+      hub().whiteboard === 'off' ? 'white' : hub().whiteboard === 'white' ? 'black' : 'off';
+    void window.pen.hub.update({ whiteboard: next });
+  };
+  const toggleTheme = () => {
+    void window.pen.hub.update({ theme: hub().theme === 'dark' ? 'light' : 'dark' });
+  };
+  const setProfile = (p: ProfileId) => void window.pen.hub.update({ profile: p });
+  const toggleSettings = () => {
+    const next = !hub().settingsOpen;
+    if (next) refreshSide();
+    void window.pen.hub.update({ settingsOpen: next });
+  };
+  const closeSettings = () => void window.pen.hub.update({ settingsOpen: false });
+
+  const showHint = (text: string) => setHint(text);
+  const clearHint = () => setHint('');
+  const isMac = createMemo(() => platform() === 'darwin');
+  const isVert = createMemo(() => hub().orientation === 'v');
+  const profileTools = createMemo(() => {
+    const allowed = new Set(PROFILES[hub().profile].tools);
+    return ALL_TOOLS.filter((t) => allowed.has(t.id));
+  });
+  const brandLine = () => {
+    if (hint()) return hint();
+    if (hub().drawMode) return 'Draw mode active';
+    return 'Lekhini';
+  };
+
+  const vertHintLine = () => {
+    if (hint()) return hint();
+    const active = TOOL_BY_ID[hub().activeTool];
+    return active ? active.label : 'Lekhini';
+  };
+
+  return (
+    <div
+      class="bar"
+      data-orient={hub().orientation}
+      data-min={hub().minimized ? 'true' : 'false'}
+      data-platform={isMac() ? 'mac' : 'win'}
+      data-theme={hub().theme}
+      data-settings-open={hub().settingsOpen ? 'true' : 'false'}
+      data-settings-side={settingsOnLeft() ? 'left' : 'right'}
+    >
+      <Show
+        when={!hub().minimized}
+        fallback={
+          <div class="mini" onClick={restore} title="Restore">
+            <span class="mini-logo">{Logo()}</span>
+          </div>
+        }
+      >
+        <div class="bar-main" ref={barMainRef}>
+          {/* ─── HORIZONTAL TITLE BAR ─── */}
+          <Show when={!isVert()}>
+            <div class="titlebar h-titlebar">
+              <div class="tb-side tb-left">
+                <Show when={isMac()}>
+                  <div class="mac-traffic">
+                    <button
+                      class="mac-light close"
+                      onClick={closeApp}
+                      onMouseEnter={() => showHint('Quit')}
+                      onMouseLeave={clearHint}
+                    ><span>×</span></button>
+                    <button
+                      class="mac-light min"
+                      onClick={minimize}
+                      onMouseEnter={() => showHint('Minimize')}
+                      onMouseLeave={clearHint}
+                    ><span>−</span></button>
+                  </div>
+                </Show>
+              </div>
+
+              <div class="tb-center">
+                <span class="logo">{Logo()}</span>
+                <button
+                  class={`status-dot-btn ${hub().drawMode ? 'on' : ''}`}
+                  onClick={toggleDraw}
+                  onMouseEnter={() =>
+                    showHint(hub().drawMode ? 'Drawing — click to pause' : 'Idle — click to draw')
+                  }
+                  onMouseLeave={clearHint}
+                  title={hub().drawMode ? 'Drawing active' : 'Click to start drawing'}
+                  aria-label={hub().drawMode ? 'Drawing active' : 'Drawing paused'}
+                >
+                  <span class="status-dot-pulse" />
+                </button>
+                <span class={`hint ${hint() ? 'has-hint' : ''}`}>{brandLine()}</span>
+              </div>
+
+              <div class="tb-side tb-right">
+                <button
+                  class="winctl"
+                  onClick={minimize}
+                  onMouseEnter={() => showHint('Collapse toolbar')}
+                  onMouseLeave={clearHint}
+                  title="Collapse"
+                >{Icons.collapse()}</button>
+                <button
+                  class={`winctl ${hub().settingsOpen ? 'tinted' : ''}`}
+                  onClick={toggleSettings}
+                  onMouseEnter={() => showHint('Settings')}
+                  onMouseLeave={clearHint}
+                >{Icons.gear()}</button>
+                <Show when={!isMac()}>
+                  <button
+                    class="winctl"
+                    onClick={minimize}
+                    onMouseEnter={() => showHint('Minimize')}
+                    onMouseLeave={clearHint}
+                  >{Icons.minus()}</button>
+                  <button
+                    class="winctl danger"
+                    onClick={closeApp}
+                    onMouseEnter={() => showHint('Quit')}
+                    onMouseLeave={clearHint}
+                  >{Icons.close()}</button>
+                </Show>
+              </div>
+            </div>
+          </Show>
+
+          {/* ─── VERTICAL TOP STACK ─── */}
+          <Show when={isVert()}>
+            <div class="v-controls">
+              <Show when={isMac()}>
+                <div class="mac-traffic v-traffic">
+                  <button
+                    class="mac-light close"
+                    onClick={closeApp}
+                    onMouseEnter={() => showHint('Quit')}
+                    onMouseLeave={clearHint}
+                  ><span>×</span></button>
+                  <button
+                    class="mac-light min"
+                    onClick={minimize}
+                    onMouseEnter={() => showHint('Minimize')}
+                    onMouseLeave={clearHint}
+                  ><span>−</span></button>
+                </div>
+              </Show>
+              <Show when={!isMac()}>
+                <div class="v-winctls">
+                  <button
+                    class="winctl"
+                    onClick={minimize}
+                    onMouseEnter={() => showHint('Minimize')}
+                    onMouseLeave={clearHint}
+                  >{Icons.minus()}</button>
+                  <button
+                    class="winctl danger"
+                    onClick={closeApp}
+                    onMouseEnter={() => showHint('Quit')}
+                    onMouseLeave={clearHint}
+                  >{Icons.close()}</button>
+                </div>
+              </Show>
+              <button
+                class="winctl v-collapse"
+                onClick={minimize}
+                onMouseEnter={() => showHint('Collapse toolbar')}
+                onMouseLeave={clearHint}
+                title="Collapse"
+              >{Icons.collapse()}</button>
+            </div>
+            <div class="v-brand">
+              <button
+                class={`v-theme-btn ${hub().settingsOpen ? 'tinted' : ''}`}
+                onClick={toggleSettings}
+                onMouseEnter={() => showHint('Settings')}
+                onMouseLeave={clearHint}
+                title="Settings"
+              >
+                {Icons.gear()}
+              </button>
+              <span class="logo big">{Logo()}</span>
+              <button
+                class={`status-dot-btn v ${hub().drawMode ? 'on' : ''}`}
+                onClick={toggleDraw}
+                onMouseEnter={() =>
+                  showHint(hub().drawMode ? 'Drawing — click to pause' : 'Idle — click to draw')
+                }
+                onMouseLeave={clearHint}
+                title={hub().drawMode ? 'Drawing active' : 'Click to start drawing'}
+                aria-label={hub().drawMode ? 'Drawing active' : 'Drawing paused'}
+              >
+                <span class="status-dot-pulse" />
+              </button>
+            </div>
+            <div class={`v-hint ${hint() ? 'has-hint' : ''}`} title={vertHintLine()}>
+              {vertHintLine()}
+            </div>
+          </Show>
+
+          {/* ─── SCROLLABLE TOOLS + ACTIONS ─── */}
+          <div class="scroll-area" ref={scrollRef}>
+            <div class="tools-zone">
+              <For each={profileTools()}>
+                {(t) => (
+                  <button
+                    class={`tool-btn ${hub().activeTool === t.id ? 'active' : ''}`}
+                    onClick={() => setTool(t.id)}
+                    onMouseEnter={() => showHint(`${t.label} · ${t.hint}`)}
+                    onMouseLeave={clearHint}
+                  >{t.icon()}</button>
+                )}
+              </For>
+            </div>
+
+            <div class="zone-sep" />
+
+            <div class="actions-zone">
+              <button
+                class="action-btn"
+                onClick={() => window.pen.relay.undo()}
+                onMouseEnter={() => showHint('Undo · ⌘Z')}
+                onMouseLeave={clearHint}
+              >{Icons.undo()}</button>
+              <button
+                class="action-btn"
+                onClick={() => window.pen.relay.redo()}
+                onMouseEnter={() => showHint('Redo · ⌘⇧Z')}
+                onMouseLeave={clearHint}
+              >{Icons.redo()}</button>
+              <button
+                class="action-btn"
+                onClick={() => window.pen.relay.clear()}
+                onMouseEnter={() => showHint('Clear · ⌘⇧C')}
+                onMouseLeave={clearHint}
+              >{Icons.clear()}</button>
+              <button
+                class="action-btn"
+                onClick={() => window.pen.relay.screenshot()}
+                onMouseEnter={() => showHint('Screenshot · ⌘⇧S')}
+                onMouseLeave={clearHint}
+              >{Icons.camera()}</button>
+              <button
+                class={`action-btn ${hub().whiteboard !== 'off' ? 'tinted' : ''}`}
+                onClick={cycleBoard}
+                onMouseEnter={() =>
+                  showHint(
+                    `Board: ${hub().whiteboard === 'off' ? 'Off' : hub().whiteboard === 'white' ? 'White' : 'Black'}`,
+                  )
+                }
+                onMouseLeave={clearHint}
+              >{Icons.whiteboard()}</button>
+              <button
+                class={`action-btn thickness-trigger ${hub().thicknessFlyoutOpen ? 'tinted' : ''}`}
+                onClick={toggleThickness}
+                disabled={!isFlyoutTool(hub().activeTool)}
+                onMouseEnter={() =>
+                  showHint(
+                    isFlyoutTool(hub().activeTool)
+                      ? `Thickness · ${hub().settings.width}px`
+                      : 'Thickness — pick pencil/pen/eraser/highlighter first',
+                  )
+                }
+                onMouseLeave={clearHint}
+                title="Thickness"
+                aria-label="Thickness"
+              >{Icons.thickness()}</button>
+            </div>
+
+            {/* Horizontal: color grid sits right after the thickness
+                icon, pushed to the right via margin-left:auto with
+                breathing room from the toolbar's right edge. */}
+            <Show when={!isVert()}>
+              <div class="color-grid">
+                <For each={COLOR_PRESETS}>
+                  {(c) => (
+                    <div
+                      class={`swatch ${
+                        hub().settings.color.toLowerCase() === c.toLowerCase() ? 'active' : ''
+                      }`}
+                      style={{ background: c }}
+                      onClick={() => setColor(c)}
+                      onMouseEnter={() => showHint(c.toUpperCase())}
+                      onMouseLeave={clearHint}
+                    />
+                  )}
+                </For>
+                <label
+                  class="hex-pick"
+                  onMouseEnter={() => showHint('Custom color')}
+                  onMouseLeave={clearHint}
+                >
+                  <input
+                    type="color"
+                    value={hub().settings.color}
+                    onInput={(e) => setColor((e.currentTarget as HTMLInputElement).value)}
+                  />
+                  <span class="hex-glyph">+</span>
+                </label>
+              </div>
+            </Show>
+
+          </div>
+
+          {/* ── THICKNESS POPUP ──
+               Rendered as a sibling between scroll-area and pinned so
+               it gets its own row instead of competing for inline
+               space with the color grid (h-mode) or the actions row
+               (v-mode). The bar window auto-grows to accommodate. */}
+          <Show when={hub().thicknessFlyoutOpen && isFlyoutTool(hub().activeTool)}>
+            {(() => {
+              const tool = hub().activeTool as FlyoutTool;
+              const presets = THICKNESS_PRESETS[tool].slice(0, 4);
+              return (
+                <div class="thickness-popup" data-tool={tool}>
+                  <For each={presets}>
+                    {(w) => (
+                      <button
+                        class={`thickness-chip ${hub().settings.width === w ? 'active' : ''}`}
+                        onClick={() => pickThickness(w)}
+                        onMouseEnter={() => showHint(`${w}px`)}
+                        onMouseLeave={clearHint}
+                        title={`${w}px`}
+                        aria-label={`${w} pixels`}
+                      >
+                        <span
+                          class="thickness-chip-dot"
+                          style={{
+                            width: `${Math.min(w, isVert() ? 14 : 22)}px`,
+                            height: `${Math.min(w, isVert() ? 14 : 22)}px`,
+                            background:
+                              tool === 'eraser' || tool === 'pencil'
+                                ? 'var(--text)'
+                                : hub().settings.color,
+                            opacity: tool === 'highlighter' ? 0.55 : 1,
+                          }}
+                        />
+                      </button>
+                    )}
+                  </For>
+                </div>
+              );
+            })()}
+          </Show>
+
+          {/* ─── PINNED BOTTOM ─── swatches live here in v-mode only.
+               In h-mode pinned is empty and hidden via :empty so it
+               doesn't add a stray bottom padding band. */}
+          <div class="pinned">
+            <Show when={isVert()}>
+              <div class="swatches">
+                <For each={COLOR_PRESETS}>
+                  {(c) => (
+                    <div
+                      class={`swatch ${
+                        hub().settings.color.toLowerCase() === c.toLowerCase() ? 'active' : ''
+                      }`}
+                      style={{ background: c }}
+                      onClick={() => setColor(c)}
+                      onMouseEnter={() => showHint(c.toUpperCase())}
+                      onMouseLeave={clearHint}
+                    />
+                  )}
+                </For>
+                <label
+                  class="hex-pick"
+                  onMouseEnter={() => showHint('Custom color')}
+                  onMouseLeave={clearHint}
+                >
+                  <input
+                    type="color"
+                    value={hub().settings.color}
+                    onInput={(e) => setColor((e.currentTarget as HTMLInputElement).value)}
+                  />
+                  <span class="hex-glyph">+</span>
+                </label>
+              </div>
+            </Show>
+          </div>
+        </div>
+
+        {/* ─── SETTINGS DROPDOWN ─── */}
+        <Show when={hub().settingsOpen}>
+          <div class="settings-panel">
+            <div class="settings-header">
+              <span class="settings-title">Settings</span>
+              <button
+                class="winctl"
+                onClick={closeSettings}
+                onMouseEnter={() => showHint('Close settings')}
+                onMouseLeave={clearHint}
+                title="Close"
+              >{Icons.close()}</button>
+            </div>
+
+            <div class="settings-section">
+              <div class="settings-section-label">Profile</div>
+              <div class="profile-list">
+                <For each={PROFILE_ORDER}>
+                  {(pid) => {
+                    const p = PROFILES[pid];
+                    return (
+                      <button
+                        class={`profile-card ${hub().profile === pid ? 'active' : ''}`}
+                        onClick={() => setProfile(pid)}
+                      >
+                        <div class="profile-card-row">
+                          <span class="profile-card-name">{p.label}</span>
+                          <Show when={hub().profile === pid}>
+                            <span class="profile-card-tick">{Icons.check()}</span>
+                          </Show>
+                        </div>
+                        <span class="profile-card-desc">{p.description}</span>
+                      </button>
+                    );
+                  }}
+                </For>
+              </div>
+            </div>
+
+            <div class="settings-section">
+              <div class="settings-section-label">Appearance</div>
+              <div class="settings-row">
+                <span class="settings-row-label">Theme</span>
+                <button class="settings-toggle" onClick={toggleTheme}>
+                  <span class="settings-toggle-icon">
+                    {hub().theme === 'dark' ? Icons.moon() : Icons.sun()}
+                  </span>
+                  <span>{hub().theme === 'dark' ? 'Dark' : 'Light'}</span>
+                </button>
+              </div>
+              <div class="settings-row">
+                <span class="settings-row-label">Layout</span>
+                <button class="settings-toggle" onClick={toggleOrient}>
+                  <span class="settings-toggle-icon">{Icons.orient()}</span>
+                  <span>{hub().orientation === 'h' ? 'Horizontal' : 'Vertical'}</span>
+                </button>
+              </div>
+            </div>
+
+            <div class="settings-section">
+              <div class="settings-section-label">About</div>
+              <div class="about-card">
+                <div class="about-header">
+                  <span class="about-logo">{Logo()}</span>
+                  <div class="about-title-block">
+                    <span class="about-name">{appInfo().name}</span>
+                    <span class="about-version">v{appInfo().version}</span>
+                  </div>
+                </div>
+                <div class="about-line about-license">
+                  <span class="about-badge">Open Source</span>
+                  <span class="about-license-text">MIT License</span>
+                </div>
+                <div class="about-tagline">Made in India · 2026</div>
+              </div>
+            </div>
+          </div>
+        </Show>
+      </Show>
+    </div>
+  );
+}

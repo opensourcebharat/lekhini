@@ -1,0 +1,937 @@
+/* ───────────────────────────────────────────────────────────
+   Lekhini Toolbar — themed via CSS custom properties.
+   ─────────────────────────────────────────────────────────── */
+
+* { box-sizing: border-box; }
+
+html, body {
+  margin: 0;
+  padding: 0;
+  background: transparent;
+  font-family: -apple-system, "SF Pro Text", "Inter", system-ui, sans-serif;
+  user-select: none;
+  -webkit-user-select: none;
+  overflow: hidden;
+  font-size: 12px;
+  letter-spacing: 0.005em;
+}
+
+#root { width: 100vw; height: 100vh; }
+
+/* ── Theme tokens ── */
+
+.bar {
+  /* Dark (default) */
+  --bg: linear-gradient(180deg, #2a2a2e 0%, #1c1c20 100%);
+  --text: #e4e4e6;
+  --hint: rgba(228, 228, 230, 0.5);
+  --hint-accent: #e8c98a;
+  --border: rgba(255, 255, 255, 0.07);
+  --separator: rgba(255, 255, 255, 0.06);
+  --hover: rgba(255, 255, 255, 0.10);
+  --hover-strong: rgba(255, 255, 255, 0.14);
+  --group-bg: rgba(0, 0, 0, 0.20);
+  --group-border: rgba(255, 255, 255, 0.04);
+  --pin-bg: linear-gradient(180deg, rgba(0,0,0,0.18), rgba(0,0,0,0.28));
+  --footer-bg: rgba(0, 0, 0, 0.20);
+  --titlebar-bg: linear-gradient(180deg, rgba(255,255,255,0.025), rgba(255,255,255,0));
+  --input-bg: rgba(255, 255, 255, 0.10);
+  --input-track: rgba(255, 255, 255, 0.10);
+  --input-thumb: #ebebeb;
+  --input-thumb-border: #1f1f23;
+  --gold: #d8b572;
+  --gold-strong: #b89150;
+  --gold-text: #1c1c1e;
+  --hex-bg: rgba(0, 0, 0, 0.25);
+  --swatch-border: rgba(255, 255, 255, 0.20);
+  --swatch-border-hover: rgba(255, 255, 255, 0.45);
+  --winctl-bg: transparent;
+  --winctl-color: rgba(228, 228, 230, 0.7);
+  --winctl-hover: rgba(255, 255, 255, 0.10);
+  --shadow: 0 1px 0 rgba(255, 255, 255, 0.06) inset, 0 18px 50px rgba(0, 0, 0, 0.55);
+}
+
+.bar[data-theme='light'] {
+  --bg: linear-gradient(180deg, #fafafb 0%, #ececef 100%);
+  --text: #1c1c1e;
+  --hint: rgba(28, 28, 30, 0.55);
+  --hint-accent: #a07835;
+  --border: rgba(0, 0, 0, 0.10);
+  --separator: rgba(0, 0, 0, 0.10);
+  --hover: rgba(0, 0, 0, 0.06);
+  --hover-strong: rgba(0, 0, 0, 0.10);
+  --group-bg: rgba(0, 0, 0, 0.04);
+  --group-border: rgba(0, 0, 0, 0.06);
+  --pin-bg: linear-gradient(180deg, rgba(0,0,0,0.02), rgba(0,0,0,0.05));
+  --footer-bg: rgba(0, 0, 0, 0.03);
+  --titlebar-bg: linear-gradient(180deg, rgba(0,0,0,0.02), rgba(0,0,0,0));
+  --input-bg: rgba(0, 0, 0, 0.06);
+  --input-track: rgba(0, 0, 0, 0.10);
+  --input-thumb: #ffffff;
+  --input-thumb-border: #c8c8cc;
+  --gold: #b89150;
+  --gold-strong: #957338;
+  --gold-text: #ffffff;
+  --hex-bg: rgba(0, 0, 0, 0.04);
+  --swatch-border: rgba(0, 0, 0, 0.18);
+  --swatch-border-hover: rgba(0, 0, 0, 0.40);
+  --winctl-bg: transparent;
+  --winctl-color: rgba(28, 28, 30, 0.7);
+  --winctl-hover: rgba(0, 0, 0, 0.07);
+  --shadow: 0 1px 0 rgba(255, 255, 255, 0.5) inset, 0 12px 36px rgba(0, 0, 0, 0.18);
+}
+
+/* ── Single container ── */
+
+.bar {
+  position: relative;
+  width: 100vw;
+  height: 100vh;
+  background: var(--bg);
+  color: var(--text);
+  border: 1px solid var(--border);
+  border-radius: 11px;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  box-shadow: var(--shadow);
+}
+
+/* Horizontal layout: when settings is open, bar-main and settings-panel
+   stack vertically (default column flex). Vertical layout: bar-main and
+   settings-panel sit side by side (row flex), with row-reverse if the
+   toolbar sits on the left half of the screen so the panel grows inward. */
+.bar[data-orient='v'][data-settings-open='true'] {
+  flex-direction: row;
+}
+.bar[data-orient='v'][data-settings-open='true'][data-settings-side='left'] {
+  flex-direction: row-reverse;
+}
+
+.bar-main {
+  display: flex;
+  flex-direction: column;
+  flex-shrink: 0;
+  flex-grow: 0;
+  min-height: 0;
+  min-width: 0;
+}
+/* bar-main is content-sized so settings-panel (rendered as a sibling
+   when open) can claim its share of the bar. The window itself
+   adapts to content via setContentSize from App.tsx, so the trailing
+   space below bar-main stays minimal. */
+.bar[data-orient='h'] .bar-main { width: 100%; }
+.bar[data-orient='v'] .bar-main { width: 88px; }
+
+/* ─────────────────── HORIZONTAL TITLE BAR ─────────────────── */
+
+.h-titlebar {
+  -webkit-app-region: drag;
+  display: grid;
+  grid-template-columns: 1fr auto 1fr;
+  align-items: center;
+  height: 28px;
+  padding: 0 8px;
+  border-bottom: 1px solid var(--separator);
+  background: var(--titlebar-bg);
+  flex-shrink: 0;
+  gap: 8px;
+}
+
+.tb-side {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  -webkit-app-region: no-drag;
+  min-width: 0;
+}
+.tb-left  { justify-self: start; }
+.tb-right { justify-self: end; }
+
+.tb-center {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  justify-self: center;
+  min-width: 0;
+  pointer-events: none;
+}
+.tb-center .logo { display: inline-flex; align-items: center; }
+.tb-center .hint {
+  font-size: 11px;
+  color: var(--hint);
+  letter-spacing: 0.02em;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  transition: color 0.15s;
+}
+.tb-center .hint.has-hint { color: var(--hint-accent); font-weight: 500; }
+
+/* ── Window controls (generic / Windows) ── */
+
+.winctl {
+  appearance: none;
+  background: var(--winctl-bg);
+  color: var(--winctl-color);
+  border: none;
+  width: 22px;
+  height: 22px;
+  border-radius: 5px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  padding: 0;
+  -webkit-app-region: no-drag;
+}
+.winctl:hover { background: var(--winctl-hover); color: var(--text); }
+.winctl.danger:hover { background: #e81123; color: #fff; }
+.winctl svg { width: 14px; height: 14px; }
+
+/* ── macOS traffic lights ── */
+
+.mac-traffic {
+  -webkit-app-region: no-drag;
+  display: flex;
+  gap: 7px;
+  align-items: center;
+}
+.mac-light {
+  appearance: none;
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  border: 0.5px solid rgba(0, 0, 0, 0.35);
+  cursor: pointer;
+  position: relative;
+  padding: 0;
+  font-size: 9px;
+  font-weight: 700;
+  color: rgba(0, 0, 0, 0);
+  line-height: 1;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+.mac-light.close { background: #ff5f57; }
+.mac-light.min   { background: #febc2e; }
+.mac-traffic:hover .mac-light { color: rgba(0, 0, 0, 0.55); }
+.mac-light:active { filter: brightness(0.85); }
+
+/* ─────────────────── VERTICAL TOP STACK ─────────────────── */
+
+.v-controls {
+  -webkit-app-region: drag;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  padding: 8px 0 4px 0;
+  flex-shrink: 0;
+}
+.v-collapse {
+  -webkit-app-region: no-drag;
+  width: 20px;
+  height: 20px;
+}
+.v-collapse svg { width: 12px; height: 12px; }
+.v-traffic, .v-winctls {
+  -webkit-app-region: no-drag;
+  display: flex;
+  gap: 6px;
+  align-items: center;
+}
+.v-winctls .winctl { width: 20px; height: 20px; }
+.v-winctls .winctl svg { width: 12px; height: 12px; }
+
+.v-brand {
+  -webkit-app-region: drag;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  padding: 4px 0 8px 0;
+  border-bottom: 1px solid var(--separator);
+  flex-shrink: 0;
+}
+.v-brand .logo { display: inline-flex; }
+.v-brand .logo svg { width: 24px; height: 24px; }
+
+.v-theme-btn {
+  -webkit-app-region: no-drag;
+  appearance: none;
+  background: transparent;
+  color: var(--winctl-color);
+  border: none;
+  width: 20px;
+  height: 20px;
+  border-radius: 5px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  padding: 0;
+}
+.v-theme-btn:hover { background: var(--winctl-hover); color: var(--text); }
+.v-theme-btn svg { width: 12px; height: 12px; }
+
+/* Vertical hover-hint strip (replacement for floating tooltips, which
+   get clipped by the narrow toolbar window). */
+.v-hint {
+  -webkit-app-region: drag;
+  flex-shrink: 0;
+  height: 30px;
+  padding: 0 5px;
+  font-size: 9.5px;
+  letter-spacing: 0.02em;
+  color: var(--hint);
+  background: var(--titlebar-bg);
+  border-bottom: 1px solid var(--separator);
+  transition: color 0.12s;
+  text-align: center;
+  line-height: 1.15;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+  word-break: break-word;
+  align-items: center;
+  justify-content: center;
+}
+.v-hint.has-hint {
+  color: var(--hint-accent);
+  font-weight: 600;
+}
+
+/* ─────────────────── SCROLL AREA ─────────────────── */
+
+.scroll-area {
+  /* No flex-grow: the window resizes to content via setContentSize, so
+     scroll-area takes its natural size instead of stretching to fill
+     and leaving empty space inside. Shrink is allowed for graceful
+     degradation if the window can't grow further. */
+  flex: 0 1 auto;
+  min-height: 0;
+  min-width: 0;
+  overflow-y: auto;
+  overflow-x: hidden;
+  -webkit-app-region: no-drag;
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+}
+.scroll-area::-webkit-scrollbar { display: none; width: 0; height: 0; }
+
+/* ─── HORIZONTAL layout ─── */
+
+.bar[data-orient='h'] .scroll-area {
+  display: flex;
+  align-items: center;
+  flex-direction: row;
+  flex-wrap: nowrap;
+  /* Extra right padding so the color grid (right-aligned via
+     margin-left:auto) keeps a visible 18px margin from the toolbar's
+     right edge across all profiles. */
+  padding: 6px 18px 6px 10px;
+  gap: 8px;
+  overflow-x: auto;
+  overflow-y: hidden;
+}
+
+.bar[data-orient='h'] .tools-zone,
+.bar[data-orient='h'] .actions-zone {
+  display: flex;
+  align-items: center;
+  gap: 3px;
+  background: var(--group-bg);
+  border: 1px solid var(--group-border);
+  border-radius: 8px;
+  padding: 3px;
+  flex-shrink: 0;
+}
+
+.bar[data-orient='h'] .zone-sep {
+  width: 1px;
+  height: 22px;
+  background: var(--separator);
+  flex-shrink: 0;
+}
+
+
+/* Inline color grid in h-mode sits right after the thickness icon
+   inside scroll-area, pushed to the right via margin-left:auto. The
+   scroll-area's right padding (set above) provides the visible
+   margin from the bar's right edge. */
+.bar[data-orient='h'] .color-grid {
+  display: grid;
+  grid-template-columns: repeat(6, 14px);
+  grid-auto-rows: 14px;
+  gap: 4px;
+  padding: 4px 6px;
+  align-items: center;
+  margin-left: auto;
+  background: var(--group-bg);
+  border: 1px solid var(--group-border);
+  border-radius: 8px;
+  flex-shrink: 0;
+}
+.bar[data-orient='h'] .color-grid .swatch {
+  width: 14px;
+  height: 14px;
+  border-width: 1.2px;
+}
+.bar[data-orient='h'] .color-grid .hex-pick {
+  width: 14px;
+  height: 14px;
+  margin-left: 0;
+}
+.bar[data-orient='h'] .color-grid .hex-glyph { font-size: 11px; }
+
+.bar[data-orient='h'] .pinned {
+  flex-direction: row;
+  justify-content: flex-start;
+}
+/* H-mode pinned has no content (swatches are inline in scroll-area).
+   Hide the empty wrapper so it doesn't contribute padding+border. */
+.bar[data-orient='h'] .pinned:empty {
+  display: none;
+}
+
+/* ─── VERTICAL layout ─── */
+
+.bar[data-orient='v'] .scroll-area {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 8px 4px;
+  gap: 6px;
+}
+
+.bar[data-orient='v'] .tools-zone,
+.bar[data-orient='v'] .actions-zone {
+  display: grid;
+  grid-template-columns: repeat(2, 30px);
+  gap: 4px;
+  background: var(--group-bg);
+  border: 1px solid var(--group-border);
+  border-radius: 8px;
+  padding: 4px;
+}
+
+.bar[data-orient='v'] .zone-sep {
+  width: 40px;
+  height: 1px;
+  background: var(--separator);
+  margin: 2px 0;
+}
+
+.bar[data-orient='v'] .pinned {
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 4px 8px 4px;
+}
+
+.bar[data-orient='v'] .swatches {
+  display: grid;
+  grid-template-columns: repeat(4, 14px);
+  gap: 4px;
+  justify-content: center;
+}
+.bar[data-orient='v'] .swatch { width: 14px; height: 14px; border-width: 1.2px; }
+.bar[data-orient='v'] .hex-pick { width: 14px; height: 14px; }
+.bar[data-orient='v'] .hex-glyph { font-size: 11px; }
+
+/* ─────────────────── BUTTONS ─────────────────── */
+
+.tool-btn, .action-btn {
+  appearance: none;
+  background: transparent;
+  color: var(--text);
+  border: 1px solid transparent;
+  border-radius: 6px;
+  width: 30px;
+  height: 30px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  padding: 0;
+  transition:
+    background 0.16s cubic-bezier(0.4, 0, 0.2, 1),
+    color 0.16s cubic-bezier(0.4, 0, 0.2, 1),
+    transform 0.10s cubic-bezier(0.4, 0, 0.2, 1),
+    box-shadow 0.16s cubic-bezier(0.4, 0, 0.2, 1),
+    border-color 0.16s cubic-bezier(0.4, 0, 0.2, 1);
+  opacity: 0.85;
+}
+.tool-btn:hover, .action-btn:hover {
+  background: var(--hover);
+  opacity: 1;
+  transform: translateY(-0.5px);
+}
+.tool-btn:active, .action-btn:active { transform: translateY(0.5px) scale(0.96); }
+.tool-btn.active {
+  background: linear-gradient(180deg, var(--gold) 0%, var(--gold-strong) 100%);
+  color: var(--gold-text);
+  border-color: rgba(0,0,0,0.25);
+  opacity: 1;
+  box-shadow:
+    inset 0 -2px 0 rgba(0, 0, 0, 0.18),
+    0 1px 2px rgba(0, 0, 0, 0.4),
+    0 0 0 2px rgba(216, 181, 114, 0.18);
+}
+.action-btn.tinted {
+  background: rgba(216, 181, 114, 0.18);
+  color: var(--gold);
+  opacity: 1;
+}
+.tool-btn svg, .action-btn svg { width: 19px; height: 19px; }
+
+/* ─────────────────── PINNED COLOR / WIDTH ─────────────────── */
+
+.pinned {
+  flex-shrink: 0;
+  border-top: 1px solid var(--separator);
+  background: var(--pin-bg);
+  padding: 8px 10px;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.swatches { display: flex; gap: 5px; align-items: center; }
+.swatch {
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  border: 1.5px solid var(--swatch-border);
+  cursor: pointer;
+  transition: transform 0.08s, border-color 0.12s, box-shadow 0.12s;
+}
+.swatch:hover { transform: scale(1.15); border-color: var(--swatch-border-hover); }
+.swatch.active {
+  border-color: var(--gold);
+  box-shadow: 0 0 0 2px rgba(216, 181, 114, 0.30);
+}
+.hex-pick {
+  position: relative;
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  border: 1.5px dashed var(--swatch-border);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  color: var(--text);
+  opacity: 0.7;
+  overflow: hidden;
+  margin-left: 2px;
+}
+.hex-pick:hover { opacity: 1; border-color: var(--swatch-border-hover); }
+.hex-pick input[type='color'] {
+  position: absolute; inset: 0; width: 100%; height: 100%;
+  opacity: 0; border: none; padding: 0; cursor: pointer;
+}
+.hex-glyph { font-size: 14px; line-height: 1; pointer-events: none; }
+
+/* ─────────────────── STATUS DOT (replaces draw/pass toggle) ─────────────────── */
+
+.status-dot-btn {
+  -webkit-app-region: no-drag;
+  appearance: none;
+  background: transparent;
+  border: none;
+  padding: 0;
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  flex-shrink: 0;
+  pointer-events: auto;
+}
+.status-dot-btn .status-dot-pulse {
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  background: #e74c3c;
+  box-shadow:
+    0 0 0 1px rgba(0, 0, 0, 0.25),
+    0 0 5px rgba(231, 76, 60, 0.55);
+  transition: background 0.18s ease, box-shadow 0.18s ease, transform 0.16s ease;
+}
+.status-dot-btn:hover .status-dot-pulse {
+  transform: scale(1.18);
+}
+.status-dot-btn.on .status-dot-pulse {
+  background: #34c759;
+  box-shadow:
+    0 0 0 1px rgba(0, 0, 0, 0.25),
+    0 0 8px rgba(52, 199, 89, 0.85),
+    0 0 14px rgba(52, 199, 89, 0.35);
+  animation: statusPulse 1.8s ease-in-out infinite;
+}
+@keyframes statusPulse {
+  0%, 100% { box-shadow: 0 0 0 1px rgba(0,0,0,0.25), 0 0 8px rgba(52, 199, 89, 0.85), 0 0 14px rgba(52, 199, 89, 0.35); }
+  50%      { box-shadow: 0 0 0 1px rgba(0,0,0,0.25), 0 0 10px rgba(52, 199, 89, 0.95), 0 0 22px rgba(52, 199, 89, 0.55); }
+}
+.status-dot-btn.v {
+  width: 16px;
+  height: 16px;
+  margin-left: 2px;
+}
+.status-dot-btn.v .status-dot-pulse {
+  width: 10px;
+  height: 10px;
+}
+
+/* ─────────────────── MINIMIZED PILL ─────────────────── */
+
+.mini {
+  width: 100%;
+  height: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  -webkit-app-region: drag;
+  position: relative;
+}
+.mini::after {
+  content: '';
+  position: absolute;
+  top: 5px;
+  width: 22px;
+  height: 3px;
+  border-radius: 2px;
+  background: var(--separator);
+}
+.mini-logo { -webkit-app-region: no-drag; display: inline-flex; }
+.mini-logo svg { width: 30px; height: 30px; }
+
+/* ─────────────────── SETTINGS DROPDOWN ─────────────────── */
+
+.settings-panel {
+  -webkit-app-region: no-drag;
+  background: var(--bg);
+  color: var(--text);
+  border-radius: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  padding: 12px 14px;
+  overflow-y: auto;
+  overflow-x: hidden;
+  min-height: 0;
+  flex: 1 1 auto;
+  scrollbar-width: thin;
+}
+
+.bar[data-orient='h'][data-settings-open='true'] .settings-panel {
+  border-top: 1px solid var(--separator);
+}
+.bar[data-orient='v'][data-settings-open='true'][data-settings-side='right'] .settings-panel {
+  border-left: 1px solid var(--separator);
+}
+.bar[data-orient='v'][data-settings-open='true'][data-settings-side='left'] .settings-panel {
+  border-right: 1px solid var(--separator);
+}
+
+.settings-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+.settings-title {
+  font-size: 13px;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  color: var(--text);
+}
+
+.settings-section {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.settings-section-label {
+  font-size: 10px;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--hint);
+  font-weight: 600;
+}
+
+.profile-list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.profile-card {
+  -webkit-app-region: no-drag;
+  appearance: none;
+  text-align: left;
+  background: var(--group-bg);
+  color: var(--text);
+  border: 1px solid var(--group-border);
+  border-radius: 8px;
+  padding: 9px 10px;
+  cursor: pointer;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  transition: background 0.12s, border-color 0.12s;
+}
+.profile-card:hover {
+  background: var(--hover);
+  border-color: var(--swatch-border);
+}
+.profile-card.active {
+  background: rgba(216, 181, 114, 0.16);
+  border-color: var(--gold);
+  box-shadow: 0 0 0 1px rgba(216, 181, 114, 0.25) inset;
+}
+
+.profile-card-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+.profile-card-name {
+  font-size: 12.5px;
+  font-weight: 600;
+}
+.profile-card-tick {
+  color: var(--gold);
+  display: inline-flex;
+}
+.profile-card-tick svg { width: 14px; height: 14px; }
+.profile-card-desc {
+  font-size: 10.5px;
+  color: var(--hint);
+  line-height: 1.3;
+}
+
+.settings-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+.settings-row-label {
+  font-size: 11.5px;
+  color: var(--text);
+}
+
+.settings-toggle {
+  -webkit-app-region: no-drag;
+  appearance: none;
+  background: var(--input-bg);
+  color: var(--text);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 5px 10px;
+  font-size: 11px;
+  font-weight: 500;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  transition: background 0.12s;
+}
+.settings-toggle:hover { background: var(--hover); }
+.settings-toggle-icon {
+  display: inline-flex;
+  color: var(--hint-accent);
+}
+.settings-toggle-icon svg { width: 13px; height: 13px; }
+
+.winctl.tinted {
+  background: rgba(216, 181, 114, 0.18);
+  color: var(--gold);
+}
+
+/* ─────────────────── ABOUT CARD ─────────────────── */
+
+.about-card {
+  background: var(--group-bg);
+  border: 1px solid var(--group-border);
+  border-radius: 9px;
+  padding: 12px 12px 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.about-header {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.about-logo {
+  display: inline-flex;
+  align-items: center;
+}
+.about-logo svg { width: 28px; height: 28px; }
+.about-title-block {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.about-name {
+  font-size: 13.5px;
+  font-weight: 700;
+  letter-spacing: 0.01em;
+  color: var(--text);
+}
+.about-version {
+  font-family: "SF Mono", "JetBrains Mono", Menlo, monospace;
+  font-size: 10.5px;
+  letter-spacing: 0.04em;
+  color: var(--hint);
+}
+.about-line {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 11px;
+  color: var(--text);
+}
+.about-badge {
+  font-size: 9.5px;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  padding: 3px 7px;
+  border-radius: 4px;
+  background: rgba(52, 199, 89, 0.15);
+  color: #34c759;
+  border: 1px solid rgba(52, 199, 89, 0.3);
+}
+.about-license-text {
+  font-size: 11px;
+  color: var(--hint);
+  font-weight: 500;
+}
+.about-tagline {
+  font-size: 10.5px;
+  letter-spacing: 0.05em;
+  color: var(--hint);
+  font-style: italic;
+  padding-top: 4px;
+  border-top: 1px dashed var(--separator);
+}
+
+/* ─────────────────── INLINE THICKNESS POPUP ─────────────────── */
+
+@keyframes thicknessPopIn {
+  from { opacity: 0; transform: translateY(-2px) scale(0.96); }
+  to   { opacity: 1; transform: translateY(0) scale(1); }
+}
+
+.thickness-popup {
+  -webkit-app-region: no-drag;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 4px;
+  background: var(--group-bg);
+  border: 1px solid var(--group-border);
+  border-radius: 8px;
+  box-shadow: 0 6px 18px rgba(0, 0, 0, 0.30);
+  flex-shrink: 0;
+  /* Popup now lives in its own row as a sibling of scroll-area, so the
+     bar window grows vertically to accommodate it and the popup never
+     gets clipped or pushed off-screen. Center it horizontally — the
+     tinted thickness trigger button still indicates the state. */
+  align-self: center;
+  animation: thicknessPopIn 0.14s cubic-bezier(0.2, 0.7, 0.2, 1);
+}
+
+.bar[data-orient='h'] .thickness-popup {
+  margin: 4px 0 6px 0;
+}
+
+.bar[data-orient='v'] .thickness-popup {
+  margin: 4px 0;
+  padding: 3px;
+  gap: 2px;
+}
+
+.thickness-chip {
+  appearance: none;
+  background: var(--input-bg);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  width: 30px;
+  height: 30px;
+  padding: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  flex-shrink: 0;
+  transition:
+    background 0.14s cubic-bezier(0.4, 0, 0.2, 1),
+    border-color 0.14s cubic-bezier(0.4, 0, 0.2, 1),
+    transform 0.10s cubic-bezier(0.4, 0, 0.2, 1),
+    box-shadow 0.14s cubic-bezier(0.4, 0, 0.2, 1);
+}
+.bar[data-orient='v'] .thickness-chip {
+  width: 18px;
+  height: 18px;
+  border-radius: 5px;
+}
+.thickness-chip:hover {
+  background: var(--hover);
+  border-color: var(--swatch-border);
+  transform: translateY(-1px);
+}
+.thickness-chip:active {
+  transform: scale(0.94);
+}
+.thickness-chip.active {
+  background: rgba(216, 181, 114, 0.18);
+  border-color: var(--gold);
+  box-shadow: 0 0 0 1px rgba(216, 181, 114, 0.30) inset;
+}
+.thickness-chip-dot {
+  border-radius: 50%;
+  min-width: 2px;
+  min-height: 2px;
+  transition: width 0.14s, height 0.14s, background 0.16s;
+}
+
+/* Disabled state for the thickness trigger when the active tool isn't
+   pencil/pen/eraser/highlighter — chip selection doesn't apply. */
+.action-btn.thickness-trigger[disabled] {
+  opacity: 0.35;
+  cursor: not-allowed;
+}
+.action-btn.thickness-trigger[disabled]:hover {
+  background: transparent;
+  transform: none;
+}
+
+
+/* ─────────────────── SETTINGS PANEL TRANSITIONS ─────────────────── */
+
+.settings-panel {
+  animation: thicknessFlyoutIn 0.22s cubic-bezier(0.2, 0.7, 0.2, 1);
+}
+.bar[data-orient='v'] .settings-panel {
+  animation: thicknessFlyoutInV 0.22s cubic-bezier(0.2, 0.7, 0.2, 1);
+}
+
+.swatch {
+  transition:
+    transform 0.10s cubic-bezier(0.4, 0, 0.2, 1),
+    border-color 0.16s,
+    box-shadow 0.16s;
+}

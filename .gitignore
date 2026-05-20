@@ -1,0 +1,47 @@
+# Dependencies
+node_modules/
+
+# Build artifacts
+dist/
+dist-electron/
+release/
+out/
+*.tsbuildinfo
+
+# Environment / secrets
+.env
+.env.local
+.env.*.local
+*.pem
+*.key
+*.p12
+
+# Logs
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+
+# Editor / IDE state
+.idea/
+.vscode/
+.vite/
+*.swp
+*.swo
+*~
+
+# OS junk
+.DS_Store
+.DS_Store?
+._*
+Thumbs.db
+ehthumbs.db
+Desktop.ini
+
+# Test coverage
+coverage/
+.nyc_output/
+
+# Claude Code session data (personal, do not commit)
+.claude/

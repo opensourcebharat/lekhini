@@ -1,0 +1,67 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no" />
+    <title>Lekhini Overlay</title>
+    <style>
+      html, body {
+        margin: 0;
+        padding: 0;
+        width: 100vw;
+        height: 100vh;
+        background: transparent;
+        overflow: hidden;
+        font-family: -apple-system, system-ui, sans-serif;
+      }
+      #root, .overlay-root {
+        width: 100vw;
+        height: 100vh;
+        position: relative;
+      }
+      canvas {
+        position: absolute;
+        inset: 0;
+        pointer-events: none;
+        background: transparent;
+      }
+      .board {
+        position: absolute;
+        inset: 0;
+        pointer-events: none;
+      }
+      .capture-surface {
+        position: absolute;
+        inset: 0;
+        background: transparent;
+        cursor: crosshair;
+      }
+      .capture-surface[data-draw='false'] {
+        display: none;
+      }
+
+      /* Tool-aware cursors are set dynamically from cursors.ts so they can
+         track the active color and width. The defaults below render before
+         JS has mounted. */
+      .capture-surface[data-tool='hand'] { cursor: grab; }
+      .capture-surface[data-tool='hand']:active { cursor: grabbing; }
+      .capture-surface[data-tool='text'] { cursor: text; }
+      .text-prompt {
+        position: absolute;
+        background: rgba(20, 20, 22, 0.92);
+        color: white;
+        border: 1px solid rgba(255, 255, 255, 0.12);
+        border-radius: 8px;
+        padding: 6px 8px;
+        font-size: 14px;
+        outline: none;
+        min-width: 160px;
+        box-shadow: 0 8px 24px rgba(0, 0, 0, 0.35);
+      }
+    </style>
+  </head>
+  <body>
+    <div id="root"></div>
+    <script type="module" src="./main.tsx"></script>
+  </body>
+</html>

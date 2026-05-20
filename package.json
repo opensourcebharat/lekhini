@@ -1,0 +1,54 @@
+{
+  "name": "@opensourcebharat/lekhini",
+  "productName": "Lekhini",
+  "version": "1.0.0",
+  "description": "Lekhini — an open-source on-screen annotation overlay (pencil, pen, highlighter, eraser, shapes) for macOS / Windows / Linux. MIT licensed. Made in India · 2026. A project of opensourcebharat.org.",
+  "license": "MIT",
+  "homepage": "https://opensourcebharat.org",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/opensourcebharat/lekhini.git"
+  },
+  "bugs": {
+    "url": "https://github.com/opensourcebharat/lekhini/issues"
+  },
+  "author": {
+    "name": "Open Source Bharat",
+    "url": "https://opensourcebharat.org"
+  },
+  "main": "dist-electron/main/main.js",
+  "scripts": {
+    "dev": "vite",
+    "prebuild": "tsc --noEmit && vite build",
+    "build": "npm run prebuild && electron-builder",
+    "build:unpacked": "npm run prebuild && electron-builder --dir",
+    "build:mac":   "npm run prebuild && electron-builder --mac",
+    "build:win":   "npm run prebuild && electron-builder --win",
+    "build:linux": "npm run prebuild && electron-builder --linux",
+    "build:all":   "npm run prebuild && electron-builder -mwl",
+    "typecheck": "tsc --noEmit",
+    "format": "prettier --write .",
+    "fix:electron": "bash scripts/fix-electron.sh"
+  },
+  "dependencies": {
+    "active-win": "^8.2.1",
+    "electron-store": "^10.0.0",
+    "perfect-freehand": "^1.2.2",
+    "solid-js": "^1.8.22",
+    "zustand": "^4.5.5"
+  },
+  "devDependencies": {
+    "@types/node": "^22.7.4",
+    "electron": "^32.1.2",
+    "electron-builder": "^25.0.5",
+    "prettier": "^3.3.3",
+    "typescript": "^5.6.2",
+    "vite": "^5.4.8",
+    "vite-plugin-electron": "^0.28.8",
+    "vite-plugin-electron-renderer": "^0.14.6",
+    "vite-plugin-solid": "^2.10.2"
+  },
+  "build": {
+    "extends": "./electron-builder.yml"
+  }
+}
