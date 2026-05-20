@@ -12,10 +12,10 @@ declare global {
         onUndo(cb: () => void): () => void;
         onRedo(cb: () => void): () => void;
         onClear(cb: () => void): () => void;
-        onScreenshot(cb: (payload: { dataUrl: string }) => void): () => void;
+        onScreenshot(cb: (payload: { png: Uint8Array }) => void): () => void;
         onSnip(
           cb: (payload: {
-            dataUrl: string;
+            png: Uint8Array;
             rect: { x: number; y: number; w: number; h: number };
             scaleFactor: number;
           }) => void,
@@ -25,8 +25,8 @@ declare global {
         ): () => void;
         requestFocus(): Promise<void>;
         releaseFocus(): Promise<void>;
-        sendScreenshotResult(pngBase64: string): Promise<void>;
-        sendSnipResult(pngBase64: string): Promise<void>;
+        sendScreenshotResult(png: Uint8Array): Promise<void>;
+        sendSnipResult(png: Uint8Array): Promise<void>;
       };
       snip: {
         set(payload: {

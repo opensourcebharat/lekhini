@@ -155,13 +155,13 @@ export function OverlayApp() {
     const unUndo = window.pen.overlay.onUndo(() => store.getState().undo());
     const unRedo = window.pen.overlay.onRedo(() => store.getState().redo());
     const unClear = window.pen.overlay.onClear(() => store.getState().clear());
-    const unShot = window.pen.overlay.onScreenshot(async ({ dataUrl }) => {
-      const png = await composite(dataUrl, committed.getCanvas());
-      await window.pen.overlay.sendScreenshotResult(png);
+    const unShot = window.pen.overlay.onScreenshot(async ({ png }) => {
+      const out = await composite(png, committed.getCanvas());
+      await window.pen.overlay.sendScreenshotResult(out);
     });
-    const unSnip = window.pen.overlay.onSnip(async ({ dataUrl, rect, scaleFactor }) => {
-      const png = await compositeAndCrop(dataUrl, committed.getCanvas(), rect, scaleFactor);
-      await window.pen.overlay.sendSnipResult(png);
+    const unSnip = window.pen.overlay.onSnip(async ({ png, rect, scaleFactor }) => {
+      const out = await compositeAndCrop(png, committed.getCanvas(), rect, scaleFactor);
+      await window.pen.overlay.sendSnipResult(out);
     });
     const unSnipSel = window.pen.overlay.onSnipSelection((rect) => {
       store.getState().setSnipRect(rect);
@@ -277,6 +277,12 @@ function SnipActions(props: { rect: SnipRect }) {
   const MENU_W = 168;
   const MENU_H = 32;
   const GAP = 8;
+  // Tracks an in-flight Copy so the button can show 'Copying…' and
+  // block double-clicks. Save is fire-and-forget (capture goes
+  // through the toolbar's save flow), so it doesn't get a busy state
+  // — the menu just dismisses immediately.
+  const [busy, setBusy] = createSignal<'copy' | null>(null);
+
   const clearSnip = (): void => {
     const displayId = window.pen.env.displayId();
     void window.pen.snip.clear({ displayId });
@@ -291,9 +297,15 @@ function SnipActions(props: { rect: SnipRect }) {
     void window.pen.hub.update({ drawMode: false });
   };
   const onCopy = async (): Promise<void> => {
-    await window.pen.snip.copy();
-    clearSnip();
-    exitToIdle();
+    if (busy()) return;
+    setBusy('copy');
+    try {
+      await window.pen.snip.copy();
+    } finally {
+      setBusy(null);
+      clearSnip();
+      exitToIdle();
+    }
   };
   const onSave = (): void => {
     // The main process's captureFocusedDisplay picks up the existing
@@ -331,13 +343,15 @@ function SnipActions(props: { rect: SnipRect }) {
       <button
         class="snip-action snip-action-primary"
         onClick={() => void onCopy()}
+        disabled={busy() !== null}
         title="Copy the selection to the clipboard"
       >
-        Copy
+        {busy() === 'copy' ? 'Copying…' : 'Copy'}
       </button>
       <button
         class="snip-action"
         onClick={onSave}
+        disabled={busy() !== null}
         title="Save the selection as a PNG file"
       >
         Save
@@ -345,6 +359,7 @@ function SnipActions(props: { rect: SnipRect }) {
       <button
         class="snip-action snip-action-quiet"
         onClick={onCancel}
+        disabled={busy() !== null}
         title="Discard the selection"
         aria-label="Cancel"
       >
@@ -370,58 +385,86 @@ function TextPrompt(props: { x: number; y: number; onCommit: (s: string) => void
   );
 }
 
-async function composite(screenDataUrl: string, annotationCanvas: HTMLCanvasElement): Promise<string> {
-  const img = await loadImage(screenDataUrl);
+// Composite the full-screen capture with the overlay's annotations,
+// returning a PNG buffer. Uses createImageBitmap + canvas.toBlob —
+// both run off-thread where the browser supports it, and avoid the
+// expensive HTMLImageElement.src = dataURL round-trip that the
+// previous string-based path used.
+async function composite(
+  screenPng: Uint8Array,
+  annotationCanvas: HTMLCanvasElement,
+): Promise<Uint8Array> {
+  const bitmap = await pngToBitmap(screenPng);
+  if (!bitmap) return new Uint8Array();
   const off = document.createElement('canvas');
-  off.width = img.naturalWidth;
-  off.height = img.naturalHeight;
+  off.width = bitmap.width;
+  off.height = bitmap.height;
   const ctx = off.getContext('2d');
-  if (!ctx) return '';
-  ctx.drawImage(img, 0, 0);
+  if (!ctx) return new Uint8Array();
+  ctx.drawImage(bitmap, 0, 0);
   ctx.drawImage(annotationCanvas, 0, 0, off.width, off.height);
-  const dataUrl = off.toDataURL('image/png');
-  return dataUrl.replace(/^data:image\/png;base64,/, '');
+  bitmap.close();
+  return canvasToPng(off);
 }
 
 async function compositeAndCrop(
-  screenDataUrl: string,
+  screenPng: Uint8Array,
   annotationCanvas: HTMLCanvasElement,
   rect: { x: number; y: number; w: number; h: number },
   scaleFactor: number,
-): Promise<string> {
-  const img = await loadImage(screenDataUrl);
+): Promise<Uint8Array> {
+  const bitmap = await pngToBitmap(screenPng);
+  if (!bitmap) return new Uint8Array();
 
-  // First composite full display: screen + annotations scaled to screen pixels.
+  // Composite the full display first so the annotation canvas (which
+  // is sized to the overlay window, not to the screen capture) draws
+  // at the same scale as the underlying pixels.
   const full = document.createElement('canvas');
-  full.width = img.naturalWidth;
-  full.height = img.naturalHeight;
+  full.width = bitmap.width;
+  full.height = bitmap.height;
   const fctx = full.getContext('2d');
-  if (!fctx) return '';
-  fctx.drawImage(img, 0, 0);
+  if (!fctx) {
+    bitmap.close();
+    return new Uint8Array();
+  }
+  fctx.drawImage(bitmap, 0, 0);
   fctx.drawImage(annotationCanvas, 0, 0, full.width, full.height);
+  bitmap.close();
 
   // Then crop to the user's CSS-px rect, scaled to display pixels.
   const sx = Math.max(0, Math.round(rect.x * scaleFactor));
   const sy = Math.max(0, Math.round(rect.y * scaleFactor));
   const sw = Math.min(Math.round(rect.w * scaleFactor), full.width - sx);
   const sh = Math.min(Math.round(rect.h * scaleFactor), full.height - sy);
-  if (sw <= 0 || sh <= 0) return '';
+  if (sw <= 0 || sh <= 0) return new Uint8Array();
 
   const off = document.createElement('canvas');
   off.width = sw;
   off.height = sh;
   const ctx = off.getContext('2d');
-  if (!ctx) return '';
+  if (!ctx) return new Uint8Array();
   ctx.drawImage(full, sx, sy, sw, sh, 0, 0, sw, sh);
-  const dataUrl = off.toDataURL('image/png');
-  return dataUrl.replace(/^data:image\/png;base64,/, '');
+  return canvasToPng(off);
 }
 
-function loadImage(src: string): Promise<HTMLImageElement> {
-  return new Promise((resolve, reject) => {
-    const img = new Image();
-    img.onload = () => resolve(img);
-    img.onerror = reject;
-    img.src = src;
-  });
+async function pngToBitmap(png: Uint8Array): Promise<ImageBitmap | null> {
+  try {
+    // Cast through BlobPart — Uint8Array satisfies the structural
+    // requirement at runtime, but TS's stricter ArrayBufferLike vs
+    // ArrayBuffer split (post-5.7) complains without help.
+    const blob = new Blob([png as BlobPart], { type: 'image/png' });
+    return await createImageBitmap(blob);
+  } catch (err) {
+    console.warn('[pen] pngToBitmap failed', err);
+    return null;
+  }
+}
+
+async function canvasToPng(canvas: HTMLCanvasElement): Promise<Uint8Array> {
+  const blob = await new Promise<Blob | null>((resolve) =>
+    canvas.toBlob(resolve, 'image/png'),
+  );
+  if (!blob) return new Uint8Array();
+  const buf = await blob.arrayBuffer();
+  return new Uint8Array(buf);
 }

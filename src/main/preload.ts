@@ -16,11 +16,11 @@ const api = {
     onUndo: (cb: () => void) => bind('overlay:undo', cb),
     onRedo: (cb: () => void) => bind('overlay:redo', cb),
     onClear: (cb: () => void) => bind('overlay:clear', cb),
-    onScreenshot: (cb: (payload: { dataUrl: string }) => void) =>
+    onScreenshot: (cb: (payload: { png: Uint8Array }) => void) =>
       bind('overlay:screenshot', cb as (v: unknown) => void),
     onSnip: (
       cb: (payload: {
-        dataUrl: string;
+        png: Uint8Array;
         rect: { x: number; y: number; w: number; h: number };
         scaleFactor: number;
       }) => void,
@@ -30,10 +30,10 @@ const api = {
     ) => bind('overlay:snip-selection', cb as (v: unknown) => void),
     requestFocus: () => ipcRenderer.invoke('overlay:request-focus' satisfies IpcChannel),
     releaseFocus: () => ipcRenderer.invoke('overlay:release-focus' satisfies IpcChannel),
-    sendScreenshotResult: (pngBase64: string) =>
-      ipcRenderer.invoke('capture:screenshot:result' satisfies IpcChannel, pngBase64),
-    sendSnipResult: (pngBase64: string) =>
-      ipcRenderer.invoke('capture:snip:result' satisfies IpcChannel, pngBase64),
+    sendScreenshotResult: (png: Uint8Array) =>
+      ipcRenderer.invoke('capture:screenshot:result' satisfies IpcChannel, png),
+    sendSnipResult: (png: Uint8Array) =>
+      ipcRenderer.invoke('capture:snip:result' satisfies IpcChannel, png),
   },
   snip: {
     set: (payload: {

@@ -96,6 +96,9 @@
       }
       .snip-action:hover { background: rgba(255, 255, 255, 0.08); }
       .snip-action:active { background: rgba(255, 255, 255, 0.14); }
+      .snip-action[disabled] { opacity: 0.55; cursor: progress; }
+      .snip-action[disabled]:hover { background: transparent; }
+      .snip-action-primary[disabled]:hover { filter: none; }
       .snip-action-primary {
         background: linear-gradient(180deg, #d8b572 0%, #b89150 100%);
         color: #1c1c1e;

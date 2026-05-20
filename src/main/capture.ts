@@ -107,8 +107,8 @@ export async function copyFocusedSnipToClipboard(): Promise<void> {
   setSnipSelection(displayId, null);
   await waitMs(60);
 
-  const pngBase64 = await captureCroppedComposite(overlay, display, rect);
-  if (!pngBase64) {
+  const png = await captureCroppedComposite(overlay, display, rect);
+  if (!png) {
     if (handleCaptureFailure()) return;
     broadcast('capture:error', {
       message: "Couldn't read the screen — try again.",
@@ -117,8 +117,7 @@ export async function copyFocusedSnipToClipboard(): Promise<void> {
     return;
   }
 
-  const buf = Buffer.from(pngBase64, 'base64');
-  const img = nativeImage.createFromBuffer(buf);
+  const img = nativeImage.createFromBuffer(png);
   clipboard.writeImage(img);
 }
 
@@ -131,13 +130,13 @@ export async function captureFocusedDisplay(): Promise<void> {
   const selection = snipSelections.get(display.id) ?? null;
 
   if (!overlay || overlay.isDestroyed()) {
-    // No overlay: fall back to a raw full-display capture.
-    const dataUrl = await fullDisplayDataUrl(display);
-    if (!dataUrl) {
+    // No overlay: fall back to a raw full-display capture (uncomposited).
+    const raw = await fullDisplayPng(display);
+    if (!raw) {
       handleCaptureFailure();
       return;
     }
-    await persistDataUrl(dataUrl);
+    await persistPng(raw);
     return;
   }
 
@@ -145,31 +144,35 @@ export async function captureFocusedDisplay(): Promise<void> {
     // Clear the dashed selection visually before the screen grab.
     setSnipSelection(display.id, null);
     await waitMs(60);
-    const pngBase64 = await captureCroppedComposite(overlay, display, selection);
-    if (!pngBase64) {
+    const png = await captureCroppedComposite(overlay, display, selection);
+    if (!png) {
       handleCaptureFailure();
       return;
     }
-    await persistDataUrl(`data:image/png;base64,${pngBase64}`);
+    await persistPng(png);
     return;
   }
 
   // No selection: full-display composite (existing behavior).
-  const dataUrl = await fullDisplayDataUrl(display);
-  if (!dataUrl) {
+  const screenPng = await fullDisplayPng(display);
+  if (!screenPng) {
     handleCaptureFailure();
     return;
   }
 
   await new Promise<void>((resolve) => {
     const channel = 'capture:screenshot:result';
-    const handler = async (_evt: Electron.IpcMainInvokeEvent, pngBase64: string) => {
+    const handler = async (_evt: Electron.IpcMainInvokeEvent, png: Uint8Array) => {
       ipcMain.removeHandler(channel);
-      await persistDataUrl(`data:image/png;base64,${pngBase64}`);
+      await persistPng(Buffer.from(png));
       resolve();
     };
     ipcMain.handle(channel, handler);
-    overlay.webContents.send('overlay:screenshot', { dataUrl });
+    // Send the PNG as a Uint8Array — structured-clones across IPC as
+    // raw bytes (no base64 round-trip), about 33% less data than the
+    // old dataURL string and noticeably faster decode in the renderer
+    // via createImageBitmap.
+    overlay.webContents.send('overlay:screenshot', { png: screenPng });
     setTimeout(() => {
       ipcMain.removeHandler(channel);
       resolve();
@@ -197,7 +200,7 @@ function handleCaptureFailure(): boolean {
   return false;
 }
 
-async function fullDisplayDataUrl(display: Electron.Display): Promise<string | null> {
+async function fullDisplayPng(display: Electron.Display): Promise<Buffer | null> {
   const sources = await desktopCapturer.getSources({
     types: ['screen'],
     thumbnailSize: {
@@ -208,26 +211,28 @@ async function fullDisplayDataUrl(display: Electron.Display): Promise<string | n
   const matching =
     sources.find((s) => Number(s.display_id) === display.id) ?? sources[0];
   if (!matching) return null;
-  return matching.thumbnail.toDataURL();
+  // toPNG() goes straight to a Buffer — no base64 dataURL middleman.
+  // Buffer is structured-clonable over IPC as raw bytes.
+  return matching.thumbnail.toPNG();
 }
 
 async function captureCroppedComposite(
   overlay: BrowserWindow,
   display: Electron.Display,
   rect: Rect,
-): Promise<string | null> {
-  const screenDataUrl = await fullDisplayDataUrl(display);
-  if (!screenDataUrl) return null;
+): Promise<Buffer | null> {
+  const screenPng = await fullDisplayPng(display);
+  if (!screenPng) return null;
 
-  return new Promise<string | null>((resolve) => {
+  return new Promise<Buffer | null>((resolve) => {
     const channel = 'capture:snip:result';
-    const handler = (_evt: Electron.IpcMainInvokeEvent, pngBase64: string) => {
+    const handler = (_evt: Electron.IpcMainInvokeEvent, png: Uint8Array) => {
       ipcMain.removeHandler(channel);
-      resolve(pngBase64 || null);
+      resolve(png && png.byteLength > 0 ? Buffer.from(png) : null);
     };
     ipcMain.handle(channel, handler);
     overlay.webContents.send('overlay:snip', {
-      dataUrl: screenDataUrl,
+      png: screenPng,
       rect,
       scaleFactor: display.scaleFactor,
     });
@@ -257,10 +262,7 @@ function defaultSaveDir(): string {
   return path.join(os.homedir(), 'Pictures', 'Lekhini');
 }
 
-async function persistDataUrl(dataUrl: string): Promise<void> {
-  const base64 = dataUrl.replace(/^data:image\/png;base64,/, '');
-  const buf = Buffer.from(base64, 'base64');
-
+async function persistPng(buf: Buffer): Promise<void> {
   const state = persisted();
   const shouldPrompt = state.alwaysAskSavePath || !state.saveDir;
 
