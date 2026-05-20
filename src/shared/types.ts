@@ -64,6 +64,10 @@ export interface RegionShape {
   p2: { x: number; y: number };
   color: string;
   opacity: number;
+  // When set, render with the high-contrast B/W marching-ants pattern
+  // used for selection rectangles (snip preview). Without it the
+  // 1px-dashed white stroke is invisible against most desktops.
+  marchingAnts?: boolean;
 }
 
 export interface EllipseShape {

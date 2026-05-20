@@ -65,6 +65,13 @@ export function createToolbar(orientation: Orientation = 'h'): BrowserWindow {
 
   toolbar.setAlwaysOnTop(true, 'screen-saver', 2);
   toolbar.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true });
+  // Hide the toolbar from screen capture so the screenshot the user
+  // takes via Lekhini contains the underlying app + their annotations
+  // but NOT our toolbar chrome. macOS uses NSWindowSharingNone;
+  // Windows uses SetWindowDisplayAffinity(WDA_EXCLUDEFROMCAPTURE);
+  // Linux is no-op. Also keeps the toolbar out of any other capture
+  // tool the user runs (Loom, QuickTime, Zoom share, etc.).
+  toolbar.setContentProtection(true);
 
   if (VITE_DEV_SERVER_URL) {
     toolbar.loadURL(`${VITE_DEV_SERVER_URL}src/renderer/toolbar/index.html`);

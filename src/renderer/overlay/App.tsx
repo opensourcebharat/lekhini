@@ -3,7 +3,7 @@ import { CommittedLayer } from './canvas/CommittedLayer';
 import { LiveLayer } from './canvas/LiveLayer';
 import { attachPointerPipeline } from './canvas/pointerPipeline';
 import { cursorFor } from './cursors';
-import { store } from './store';
+import { store, type SnipRect } from './store';
 import { buildRegistry } from './tools/registry';
 import type { Item, Theme, ToolSettings, Whiteboard } from '../../shared/types';
 import type { Tool, ToolContext } from './tools/types';
@@ -15,6 +15,10 @@ export function OverlayApp() {
   const [drawMode, setDrawMode] = createSignal(store.getState().drawMode);
   const [activeTool, setActiveToolSignal] = createSignal(store.getState().activeTool);
   const [whiteboard, setWhiteboard] = createSignal<Whiteboard>('off');
+  // Reactive mirror of the store's snipRect so the SnipActions menu
+  // can re-render on Solid's signal cycle. Synced inside the store
+  // subscriber below.
+  const [snipRectSig, setSnipRectSig] = createSignal<SnipRect | null>(null);
   let currentTheme: Theme = 'dark';
 
   const applyCursor = () => {
@@ -134,6 +138,7 @@ export function OverlayApp() {
       ) {
         committed.render(state.items, state.selectedId, state.snipRect);
       }
+      if (state.snipRect !== prev.snipRect) setSnipRectSig(state.snipRect);
     });
 
     const onResize = () => {
@@ -250,6 +255,92 @@ export function OverlayApp() {
           />
         )}
       </Show>
+      {/* Menu is only operable while the snip tool is the active
+          drawing tool, because the overlay window is click-through
+          otherwise (setIgnoreMouseEvents). Hiding it then prevents a
+          visible-but-dead menu floating on screen. The underlying
+          selection stays in main's snipSelections map either way.
+          (Order matters: snipRectSig() goes last so the && chain
+          resolves to the SnipRect itself for Show's accessor.) */}
+      <Show when={drawMode() && activeTool() === 'snip' && snipRectSig()}>
+        {(rect) => <SnipActions rect={rect()} />}
+      </Show>
+    </div>
+  );
+}
+
+// Floating Copy / Save / Cancel menu for the active snip selection.
+// Anchored at the bottom-right corner of the rect with a small offset.
+// Falls back to inside-rect-bottom-right if the rect is too close to
+// the screen edge to fit the menu below it.
+function SnipActions(props: { rect: SnipRect }) {
+  const MENU_W = 168;
+  const MENU_H = 32;
+  const GAP = 8;
+  const clearSnip = (): void => {
+    const displayId = window.pen.env.displayId();
+    void window.pen.snip.clear({ displayId });
+  };
+  const onCopy = async (): Promise<void> => {
+    await window.pen.snip.copy();
+    clearSnip();
+  };
+  const onSave = (): void => {
+    // The main process's captureFocusedDisplay picks up the existing
+    // selection and writes a cropped PNG (going through the save
+    // dialog or the remembered folder).
+    void window.pen.relay.screenshot();
+    // Don't clear the selection here — capture.ts clears the visual
+    // selection itself just before grabbing the pixels so it isn't
+    // baked into the PNG, then we let the user know via the titlebar
+    // hint in the toolbar window.
+  };
+  const onCancel = (): void => clearSnip();
+
+  const positioned = (): { left: string; top: string } => {
+    const r = props.rect;
+    const winW = window.innerWidth;
+    const winH = window.innerHeight;
+    // Default: below the rect, right-aligned to its right edge.
+    let left = r.x + r.w - MENU_W;
+    let top = r.y + r.h + GAP;
+    // If it would overflow the bottom of the screen, place ABOVE the rect.
+    if (top + MENU_H > winH - 4) top = r.y - MENU_H - GAP;
+    // If still off-screen (very tall rect near top), tuck inside the rect.
+    if (top < 4) top = Math.min(r.y + r.h - MENU_H - GAP, winH - MENU_H - 4);
+    // Horizontal clamping: never let the menu fall off either edge.
+    left = Math.max(4, Math.min(left, winW - MENU_W - 4));
+    return { left: `${left}px`, top: `${top}px` };
+  };
+
+  return (
+    <div
+      class="snip-actions"
+      style={positioned()}
+      onPointerDown={(e) => e.stopPropagation()}
+    >
+      <button
+        class="snip-action snip-action-primary"
+        onClick={() => void onCopy()}
+        title="Copy the selection to the clipboard"
+      >
+        Copy
+      </button>
+      <button
+        class="snip-action"
+        onClick={onSave}
+        title="Save the selection as a PNG file"
+      >
+        Save
+      </button>
+      <button
+        class="snip-action snip-action-quiet"
+        onClick={onCancel}
+        title="Discard the selection"
+        aria-label="Cancel"
+      >
+        ✕
+      </button>
     </div>
   );
 }

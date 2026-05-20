@@ -58,6 +58,56 @@
         min-width: 160px;
         box-shadow: 0 8px 24px rgba(0, 0, 0, 0.35);
       }
+      /* Snip action menu — Copy / Save / Cancel pinned to the
+         bottom-right of a completed snip selection. Sits ABOVE the
+         capture-surface in DOM order so clicks land on buttons rather
+         than the underlying drawing surface; we also stopPropagation
+         on pointerdown defensively. */
+      .snip-actions {
+        position: absolute;
+        display: inline-flex;
+        align-items: center;
+        gap: 4px;
+        padding: 3px;
+        background: rgba(20, 20, 22, 0.94);
+        border: 1px solid rgba(255, 255, 255, 0.12);
+        border-radius: 8px;
+        box-shadow: 0 10px 28px rgba(0, 0, 0, 0.45);
+        font-size: 12px;
+        line-height: 1;
+        z-index: 50;
+        animation: snipActionsIn 0.14s cubic-bezier(0.2, 0.7, 0.2, 1);
+      }
+      @keyframes snipActionsIn {
+        from { opacity: 0; transform: translateY(-2px) scale(0.97); }
+        to   { opacity: 1; transform: translateY(0) scale(1); }
+      }
+      .snip-action {
+        appearance: none;
+        background: transparent;
+        color: #e4e4e6;
+        border: 1px solid transparent;
+        border-radius: 5px;
+        padding: 6px 12px;
+        font-size: 12px;
+        font-weight: 500;
+        cursor: pointer;
+        transition: background 0.12s, color 0.12s;
+      }
+      .snip-action:hover { background: rgba(255, 255, 255, 0.08); }
+      .snip-action:active { background: rgba(255, 255, 255, 0.14); }
+      .snip-action-primary {
+        background: linear-gradient(180deg, #d8b572 0%, #b89150 100%);
+        color: #1c1c1e;
+        font-weight: 600;
+      }
+      .snip-action-primary:hover { filter: brightness(1.05); }
+      .snip-action-quiet {
+        color: rgba(228, 228, 230, 0.65);
+        padding: 6px 8px;
+        font-size: 13px;
+      }
+      .snip-action-quiet:hover { color: #e4e4e6; }
     </style>
   </head>
   <body>

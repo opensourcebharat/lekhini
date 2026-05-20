@@ -262,14 +262,32 @@ function drawRegion(
   const w = Math.abs(item.p2.x - item.p1.x);
   const h = Math.abs(item.p2.y - item.p1.y);
   ctx.save();
-  ctx.globalAlpha = item.opacity * 0.18;
-  ctx.fillStyle = item.color;
-  ctx.fillRect(x, y, w, h);
-  ctx.globalAlpha = item.opacity;
-  ctx.strokeStyle = item.color;
-  ctx.setLineDash([4, 4]);
-  ctx.lineWidth = 1;
-  ctx.strokeRect(x, y, w, h);
+  if (item.marchingAnts) {
+    // Snip preview: two-pass marching ants — black underneath, white on
+    // top with a dash-offset so the alternation is visible on light
+    // AND dark surfaces. Half-pixel offset for crisp 1px lines. A faint
+    // dim wash inside indicates the captured region.
+    ctx.globalAlpha = 0.18;
+    ctx.fillStyle = '#000000';
+    ctx.fillRect(x, y, w, h);
+    ctx.globalAlpha = 1;
+    ctx.lineWidth = 1;
+    ctx.setLineDash([6, 4]);
+    ctx.strokeStyle = 'rgba(0, 0, 0, 0.85)';
+    ctx.strokeRect(x + 0.5, y + 0.5, w, h);
+    ctx.strokeStyle = 'rgba(255, 255, 255, 0.95)';
+    ctx.lineDashOffset = 5;
+    ctx.strokeRect(x + 0.5, y + 0.5, w, h);
+  } else {
+    ctx.globalAlpha = item.opacity * 0.18;
+    ctx.fillStyle = item.color;
+    ctx.fillRect(x, y, w, h);
+    ctx.globalAlpha = item.opacity;
+    ctx.strokeStyle = item.color;
+    ctx.setLineDash([4, 4]);
+    ctx.lineWidth = 1;
+    ctx.strokeRect(x, y, w, h);
+  }
   ctx.restore();
 }
 

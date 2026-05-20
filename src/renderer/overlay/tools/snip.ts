@@ -2,9 +2,6 @@ import type { RegionShape } from '../../../shared/types';
 import type { Tool } from './types';
 import { nextId } from './types';
 
-const PREVIEW_COLOR = '#ffffff';
-const PREVIEW_OPACITY = 0.9;
-
 export const snip: Tool = (() => {
   let draft: RegionShape | null = null;
   let anchor: { x: number; y: number } | null = null;
@@ -21,8 +18,12 @@ export const snip: Tool = (() => {
         id: nextId('snip-preview'),
         p1: anchor,
         p2: anchor,
-        color: PREVIEW_COLOR,
-        opacity: PREVIEW_OPACITY,
+        // Color/opacity are ignored when marchingAnts is set — the
+        // renderer paints its own high-contrast B/W pattern. Kept here
+        // for type-shape compatibility with RegionShape.
+        color: '#ffffff',
+        opacity: 1,
+        marchingAnts: true,
       };
       ctx.setDraft(draft);
     },
