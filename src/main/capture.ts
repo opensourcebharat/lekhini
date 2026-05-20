@@ -78,7 +78,9 @@ function gateScreenForCapture(action: PendingAction): boolean {
   broadcast('permissions:needed', { reason: 'screen' });
   pendingAction = action;
   onFocusRecheck((newStatus) => {
-    notifyStatus();
+    // Pass the fresh status explicitly so renderers don't see the
+    // possibly-stale getMediaAccessStatus cache.
+    notifyStatus(newStatus);
     if (newStatus !== 'granted') return;
     const a = pendingAction;
     pendingAction = null;
@@ -184,7 +186,7 @@ function handleCaptureFailure(): boolean {
     broadcast('permissions:needed', { reason: 'screen' });
     pendingAction = 'capture';
     onFocusRecheck((newStatus) => {
-      notifyStatus();
+      notifyStatus(newStatus);
       if (newStatus === 'granted' && pendingAction === 'capture') {
         pendingAction = null;
         void captureFocusedDisplay();

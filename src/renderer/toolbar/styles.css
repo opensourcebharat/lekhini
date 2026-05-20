@@ -998,6 +998,18 @@ html, body {
 }
 .status-btn-primary:hover { filter: brightness(1.05); }
 
+/* Relaunch — clearly destructive-ish, dimmed so it doesn't compete
+   with the primary action but visible enough to be the escape hatch
+   when Recheck keeps reporting denied. */
+.status-btn-relaunch {
+  background: transparent !important;
+  border-color: rgba(231, 76, 60, 0.4) !important;
+  color: #e74c3c !important;
+}
+.status-btn-relaunch:hover {
+  background: rgba(231, 76, 60, 0.12) !important;
+}
+
 /* Clickable success hint in the titlebar — when revealPath is set the
    message becomes a Reveal link. Gold accent + pointer cursor. */
 .hint.is-reveal,

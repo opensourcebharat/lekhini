@@ -61,6 +61,7 @@ const api = {
   },
   permissions: {
     check: () => ipcRenderer.invoke('permissions:check' satisfies IpcChannel),
+    deepCheck: () => ipcRenderer.invoke('permissions:deep-recheck' satisfies IpcChannel),
     open: (which: 'screen' | 'accessibility') =>
       ipcRenderer.invoke('permissions:open' satisfies IpcChannel, which),
     onNeeded: (cb: (payload: { reason: 'screen' }) => void) =>
@@ -95,6 +96,7 @@ const api = {
         name: string;
         version: string;
       }>,
+    relaunch: () => ipcRenderer.invoke('app:relaunch' satisfies IpcChannel),
   },
   env: {
     displayId: () => ipcRenderer.sendSync('overlay:display-id'),

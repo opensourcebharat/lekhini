@@ -1,4 +1,11 @@
-import { app, BrowserWindow, ipcMain, shell, systemPreferences } from 'electron';
+import {
+  app,
+  BrowserWindow,
+  desktopCapturer,
+  ipcMain,
+  shell,
+  systemPreferences,
+} from 'electron';
 import type { ScreenPermissionStatus } from '../shared/types';
 
 export interface PermissionStatus {
@@ -23,6 +30,36 @@ export function screenStatus(): ScreenPermissionStatus {
   return check().screen;
 }
 
+// Active probe of the actual capture API. macOS's TCC layer returns a
+// cached value from getMediaAccessStatus that does NOT refresh just
+// because the user toggled Screen Recording on in System Settings —
+// the cache only updates after an API call that hits the system
+// capture stack. Without this probe our "Recheck" button would keep
+// reporting 'denied' for the rest of the process lifetime even after
+// permission is actually granted, which is what bit our user.
+//
+// The probe requests a 1×1 thumbnail so it returns fast and uses
+// almost no memory. If we get any sources back, permission is real
+// and the user can proceed.
+export async function deepRecheck(): Promise<ScreenPermissionStatus> {
+  if (process.platform !== 'darwin') return 'granted';
+  const cached = screenStatus();
+  if (cached === 'granted') return 'granted';
+  try {
+    const sources = await desktopCapturer.getSources({
+      types: ['screen'],
+      thumbnailSize: { width: 1, height: 1 },
+    });
+    if (sources.length > 0) return 'granted';
+  } catch (err) {
+    console.warn('[pen] deepRecheck capture probe failed', err);
+  }
+  // Probe failed too — re-read the cache one more time in case it
+  // flipped during the probe, otherwise return whatever we saw first.
+  const after = screenStatus();
+  return after === 'granted' ? 'granted' : cached;
+}
+
 export function open(which: 'screen' | 'accessibility') {
   if (process.platform !== 'darwin') return;
   const urls = {
@@ -36,8 +73,12 @@ export function open(which: 'screen' | 'accessibility') {
 // Broadcast a permission-status update to every renderer that's
 // currently alive. Used by onFocusRecheck and by capture.ts when it
 // discovers a denial through the capturer's empty-source return.
-export function notifyStatus(): void {
-  const payload = { screen: screenStatus() };
+//
+// Pass `override` when you already know the fresh status — e.g. after
+// deepRecheck() — so renderers receive the truth instead of the
+// possibly-stale cached value from getMediaAccessStatus.
+export function notifyStatus(override?: ScreenPermissionStatus): void {
+  const payload = { screen: override ?? screenStatus() };
   for (const win of BrowserWindow.getAllWindows()) {
     if (!win.isDestroyed()) win.webContents.send('permissions:status', payload);
   }
@@ -65,8 +106,11 @@ export function onFocusRecheck(cb: (status: ScreenPermissionStatus) => void): vo
     activeFocusHandler = null;
     if (fn) {
       // Defer one tick — macOS sometimes updates TCC state slightly
-      // after the focus event fires.
-      setTimeout(() => fn(screenStatus()), 120);
+      // after the focus event fires — then deep-probe so a freshly
+      // granted permission is actually seen.
+      setTimeout(() => {
+        void deepRecheck().then(fn);
+      }, 120);
     }
   };
   app.once('browser-window-focus', activeFocusHandler);
@@ -75,4 +119,14 @@ export function onFocusRecheck(cb: (status: ScreenPermissionStatus) => void): vo
 export function registerPermissionsIpc() {
   ipcMain.handle('permissions:check', () => check());
   ipcMain.handle('permissions:open', (_evt, which: 'screen' | 'accessibility') => open(which));
+  ipcMain.handle('permissions:deep-recheck', async () => ({
+    screen: await deepRecheck(),
+  }));
+  // Relaunch escape hatch — surfaced in the permission panel for the
+  // rare macOS cases where even the deep probe can't see a freshly
+  // granted permission until the process restarts.
+  ipcMain.handle('app:relaunch', () => {
+    app.relaunch();
+    app.exit(0);
+  });
 }

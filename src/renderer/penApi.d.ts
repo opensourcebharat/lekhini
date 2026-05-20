@@ -51,6 +51,7 @@ declare global {
       };
       permissions: {
         check(): Promise<{ screen: ScreenPermissionStatus; accessibility: boolean }>;
+        deepCheck(): Promise<{ screen: ScreenPermissionStatus }>;
         open(which: 'screen' | 'accessibility'): Promise<void>;
         onNeeded(cb: (payload: { reason: 'screen' }) => void): () => void;
         onStatus(cb: (payload: { screen: ScreenPermissionStatus }) => void): () => void;
@@ -69,6 +70,7 @@ declare global {
       };
       app: {
         info(): Promise<{ name: string; version: string }>;
+        relaunch(): Promise<void>;
       };
       env: {
         displayId(): number;

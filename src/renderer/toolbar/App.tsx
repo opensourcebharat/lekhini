@@ -157,7 +157,10 @@ export function ToolbarApp() {
         setPanelKind((k) => (k === 'permission' ? null : k));
         setPanelHint(null);
       } else if (panelKind() === 'permission') {
-        setPanelHint('Still off. Toggle Lekhini on under Screen Recording, then Recheck.');
+        setPanelHint(
+          "Still off — macOS sometimes only sees the change after a restart. " +
+            "If you just toggled it on, click Relaunch.",
+        );
       }
     });
     const offSaved = window.pen.capture.onSaved((p) => {
@@ -398,13 +401,26 @@ export function ToolbarApp() {
     setPanelHint(null);
   };
   const recheckPermission = async () => {
-    const status = (await window.pen.permissions.check()) as {
+    // Use the deep probe — macOS's getMediaAccessStatus caches the
+    // result per-process and a plain check() can keep reporting
+    // 'denied' for the whole session even after the user toggled the
+    // permission on in System Settings. The deep probe actually hits
+    // desktopCapturer and forces a TCC refresh.
+    setPanelHint('Checking…');
+    const status = (await window.pen.permissions.deepCheck()) as {
       screen: 'granted' | 'denied' | 'not-determined' | 'restricted' | 'unknown';
     };
-    if (status.screen === 'granted') closePanel();
-    else setPanelHint('Still off. Toggle Lekhini on under Screen Recording, then Recheck.');
+    if (status.screen === 'granted') {
+      closePanel();
+    } else {
+      setPanelHint(
+        "Still off — macOS sometimes only sees the change after a restart. " +
+          "If you just toggled it on, click Relaunch.",
+      );
+    }
   };
   const openScreenPrefs = () => void window.pen.permissions.open('screen');
+  const relaunchApp = () => void window.pen.app.relaunch();
   const pickFolderFromError = async () => {
     const dir = (await window.pen.settings.pickSaveDir()) as string | null;
     if (dir) {
@@ -964,6 +980,15 @@ export function ToolbarApp() {
                   >
                     Recheck
                   </button>
+                  <Show when={isMac()}>
+                    <button
+                      class="settings-toggle status-btn-relaunch"
+                      onClick={relaunchApp}
+                      title="Quit and reopen Lekhini — sometimes needed for macOS to pick up newly granted permissions"
+                    >
+                      Relaunch
+                    </button>
+                  </Show>
                 </div>
               </div>
             </Show>

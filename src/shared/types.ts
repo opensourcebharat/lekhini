@@ -179,6 +179,8 @@ export type IpcChannel =
   | 'permissions:open'
   | 'permissions:needed'
   | 'permissions:status'
+  | 'permissions:deep-recheck'
+  | 'app:relaunch'
   | 'settings:save-dir:pick'
   | 'shell:open-path';
 
