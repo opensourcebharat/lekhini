@@ -157,16 +157,17 @@ html, body {
   pointer-events: none;
 }
 .tb-center .logo { display: inline-flex; align-items: center; }
-.tb-center .hint {
-  font-size: 11px;
-  color: var(--hint);
-  letter-spacing: 0.02em;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  transition: color 0.15s;
+/* h-mode logo: bigger now that nothing else sits in the titlebar
+   center. Subtle hover scale + soft glow when drawing so it doubles
+   as a brand mark and a 'is this thing working' affordance. */
+.tb-center .logo.big svg,
+.tb-center .logo.big img { width: 32px; height: 32px; border-radius: 7px; }
+.tb-center .logo.big {
+  transition: transform 0.18s cubic-bezier(0.2, 0.7, 0.2, 1);
 }
-.tb-center .hint.has-hint { color: var(--hint-accent); font-weight: 500; }
+.tb-center .logo.big:hover { transform: scale(1.06); }
+/* (Hover-hint text moved out of the titlebar into the new
+   .bar-footer at the bottom of the bar — see footer rules below.) */
 
 /* ── Window controls (generic / Windows) ── */
 
@@ -256,7 +257,15 @@ html, body {
   flex-shrink: 0;
 }
 .v-brand .logo { display: inline-flex; }
-.v-brand .logo svg, .v-brand .logo img { width: 24px; height: 24px; }
+/* v-mode logo: even bigger now that brand strip carries only the
+   logo (settings + status-dot moved to footer). The vertical
+   toolbar is 88px wide so 40px works comfortably with breathing
+   room. */
+.v-brand .logo svg, .v-brand .logo img { width: 40px; height: 40px; border-radius: 9px; }
+.v-brand .logo {
+  transition: transform 0.18s cubic-bezier(0.2, 0.7, 0.2, 1);
+}
+.v-brand .logo:hover { transform: scale(1.06); }
 
 .v-theme-btn {
   -webkit-app-region: no-drag;
@@ -276,33 +285,8 @@ html, body {
 .v-theme-btn:hover { background: var(--winctl-hover); color: var(--text); }
 .v-theme-btn svg { width: 12px; height: 12px; }
 
-/* Vertical hover-hint strip (replacement for floating tooltips, which
-   get clipped by the narrow toolbar window). */
-.v-hint {
-  -webkit-app-region: drag;
-  flex-shrink: 0;
-  height: 30px;
-  padding: 0 5px;
-  font-size: 9.5px;
-  letter-spacing: 0.02em;
-  color: var(--hint);
-  background: var(--titlebar-bg);
-  border-bottom: 1px solid var(--separator);
-  transition: color 0.12s;
-  text-align: center;
-  line-height: 1.15;
-  display: -webkit-box;
-  -webkit-line-clamp: 2;
-  -webkit-box-orient: vertical;
-  overflow: hidden;
-  word-break: break-word;
-  align-items: center;
-  justify-content: center;
-}
-.v-hint.has-hint {
-  color: var(--hint-accent);
-  font-weight: 600;
-}
+/* (The old .v-hint strip was removed — the hover-hint now lives in
+   the bottom .bar-footer that's shared by both orientations.) */
 
 /* ─────────────────── SCROLL AREA ─────────────────── */
 
@@ -1028,10 +1012,9 @@ html, body {
   background: rgba(231, 76, 60, 0.12) !important;
 }
 
-/* Clickable success hint in the titlebar — when revealPath is set the
+/* Clickable success hint in the footer — when revealPath is set the
    message becomes a Reveal link. Gold accent + pointer cursor. */
-.hint.is-reveal,
-.v-hint.is-reveal {
+.bar-footer-hint.is-reveal {
   color: var(--gold) !important;
   cursor: pointer;
   -webkit-app-region: no-drag;
@@ -1041,8 +1024,7 @@ html, body {
   text-decoration-color: rgba(216, 181, 114, 0.5);
   text-underline-offset: 2px;
 }
-.hint.is-reveal:hover,
-.v-hint.is-reveal:hover {
+.bar-footer-hint.is-reveal:hover {
   text-decoration-color: var(--gold);
 }
 
@@ -1073,4 +1055,71 @@ html, body {
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
+}
+
+/* ─────────────────── BAR FOOTER ─────────────────── */
+/* Bottom strip in both orientations carrying the hover-hint on the
+   left and the rarely-used status-dot + settings button on the right.
+   Moved here from the titlebar so the top of the toolbar is just the
+   logo + window controls, and incidental UI (like 'what does this
+   button do?' tooltips) doesn't compete with the brand mark. */
+
+.bar-footer {
+  -webkit-app-region: drag;
+  flex-shrink: 0;
+  border-top: 1px solid var(--separator);
+  background: var(--footer-bg);
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 6px;
+}
+
+.bar-footer-hint {
+  flex: 1 1 auto;
+  min-width: 0;
+  font-size: 10.5px;
+  color: var(--hint);
+  letter-spacing: 0.01em;
+  transition: color 0.15s;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.bar-footer-hint.has-hint {
+  color: var(--hint-accent);
+  font-weight: 500;
+}
+
+.bar-footer-controls {
+  -webkit-app-region: no-drag;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  flex-shrink: 0;
+}
+.bar-footer-controls .winctl.footer-settings {
+  width: 22px;
+  height: 22px;
+}
+.bar-footer-controls .winctl.footer-settings svg { width: 13px; height: 13px; }
+
+/* Vertical-mode footer needs to stack — the bar is 88px wide which
+   isn't enough room for hint text alongside two buttons in a row. */
+.bar[data-orient='v'] .bar-footer {
+  flex-direction: column;
+  gap: 4px;
+  padding: 6px 4px;
+}
+.bar[data-orient='v'] .bar-footer-hint {
+  white-space: normal;
+  text-align: center;
+  line-height: 1.2;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  font-size: 10px;
+}
+.bar[data-orient='v'] .bar-footer-controls {
+  justify-content: center;
 }

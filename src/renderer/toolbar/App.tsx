@@ -475,16 +475,15 @@ export function ToolbarApp() {
     const allowed = new Set(PROFILES[hub().profile].tools);
     return ALL_TOOLS.filter((t) => allowed.has(t.id));
   });
-  const brandLine = () => {
-    if (hint()) return hint();
-    if (hub().drawMode) return 'Draw mode active';
-    return 'Lekhini';
-  };
-
-  const vertHintLine = () => {
+  // Hint line for the footer. Hover-hint takes priority; otherwise we
+  // show the active tool's name so the footer is never empty in
+  // either orientation. brandLine / vertHintLine retained for any
+  // future use but the footer is the new home for hover text.
+  const footerHintLine = (): string => {
     if (hint()) return hint();
     const active = TOOL_BY_ID[hub().activeTool];
-    return active ? active.label : 'Lekhini';
+    if (active) return active.label;
+    return hub().drawMode ? 'Drawing' : 'Idle';
   };
 
   return (
@@ -529,27 +528,7 @@ export function ToolbarApp() {
               </div>
 
               <div class="tb-center">
-                <span class="logo">{Logo()}</span>
-                <button
-                  class={`status-dot-btn ${hub().drawMode ? 'on' : ''}`}
-                  onClick={toggleDraw}
-                  onMouseEnter={() =>
-                    showHint(hub().drawMode ? 'Drawing — click to pause' : 'Idle — click to draw')
-                  }
-                  onMouseLeave={clearHint}
-                  title={hub().drawMode ? 'Drawing active' : 'Click to start drawing'}
-                  aria-label={hub().drawMode ? 'Drawing active' : 'Drawing paused'}
-                >
-                  <span class="status-dot-pulse" />
-                </button>
-                <span
-                  class={`hint ${hint() ? 'has-hint' : ''} ${revealPath() ? 'is-reveal' : ''}`}
-                  onClick={() => {
-                    const p = revealPath();
-                    if (p) void window.pen.shell.openPath(p);
-                  }}
-                  title={revealPath() ? 'Click to reveal in folder' : ''}
-                >{brandLine()}</span>
+                <span class="logo big">{Logo()}</span>
               </div>
 
               <div class="tb-side tb-right">
@@ -560,12 +539,6 @@ export function ToolbarApp() {
                   onMouseLeave={clearHint}
                   title="Collapse"
                 >{Icons.collapse()}</button>
-                <button
-                  class={`winctl ${hub().settingsOpen ? 'tinted' : ''}`}
-                  onClick={toggleSettings}
-                  onMouseEnter={() => showHint('Settings')}
-                  onMouseLeave={clearHint}
-                >{Icons.gear()}</button>
                 <Show when={!isMac()}>
                   <button
                     class="winctl"
@@ -628,38 +601,7 @@ export function ToolbarApp() {
               >{Icons.collapse()}</button>
             </div>
             <div class="v-brand">
-              <button
-                class={`v-theme-btn ${hub().settingsOpen ? 'tinted' : ''}`}
-                onClick={toggleSettings}
-                onMouseEnter={() => showHint('Settings')}
-                onMouseLeave={clearHint}
-                title="Settings"
-              >
-                {Icons.gear()}
-              </button>
               <span class="logo big">{Logo()}</span>
-              <button
-                class={`status-dot-btn v ${hub().drawMode ? 'on' : ''}`}
-                onClick={toggleDraw}
-                onMouseEnter={() =>
-                  showHint(hub().drawMode ? 'Drawing — click to pause' : 'Idle — click to draw')
-                }
-                onMouseLeave={clearHint}
-                title={hub().drawMode ? 'Drawing active' : 'Click to start drawing'}
-                aria-label={hub().drawMode ? 'Drawing active' : 'Drawing paused'}
-              >
-                <span class="status-dot-pulse" />
-              </button>
-            </div>
-            <div
-              class={`v-hint ${hint() ? 'has-hint' : ''} ${revealPath() ? 'is-reveal' : ''}`}
-              title={revealPath() ? 'Click to reveal in folder' : vertHintLine()}
-              onClick={() => {
-                const p = revealPath();
-                if (p) void window.pen.shell.openPath(p);
-              }}
-            >
-              {vertHintLine()}
             </div>
           </Show>
 
@@ -841,6 +783,47 @@ export function ToolbarApp() {
                 </label>
               </div>
             </Show>
+          </div>
+
+          {/* ─── FOOTER ─── hover-hint on the left, plus the
+               rarely-touched status-dot + settings on the right. Lives
+               at the bottom of bar-main so it doesn't take attention
+               away from the tools. The hint area is also where the
+               'Saved · …/lekhini-…png' reveal link surfaces. */}
+          <div class="bar-footer">
+            <div
+              class={`bar-footer-hint ${hint() ? 'has-hint' : ''} ${revealPath() ? 'is-reveal' : ''}`}
+              onClick={() => {
+                const p = revealPath();
+                if (p) void window.pen.shell.openPath(p);
+              }}
+              title={revealPath() ? 'Click to reveal in folder' : footerHintLine()}
+            >
+              {footerHintLine()}
+            </div>
+            <div class="bar-footer-controls">
+              <button
+                class={`status-dot-btn ${hub().drawMode ? 'on' : ''}`}
+                onClick={toggleDraw}
+                onMouseEnter={() =>
+                  showHint(hub().drawMode ? 'Drawing — click to pause' : 'Idle — click to draw')
+                }
+                onMouseLeave={clearHint}
+                title={hub().drawMode ? 'Drawing active' : 'Click to start drawing'}
+                aria-label={hub().drawMode ? 'Drawing active' : 'Drawing paused'}
+              >
+                <span class="status-dot-pulse" />
+              </button>
+              <button
+                class={`winctl footer-settings ${hub().settingsOpen ? 'tinted' : ''}`}
+                onClick={toggleSettings}
+                onMouseEnter={() => showHint('Settings')}
+                onMouseLeave={clearHint}
+                title="Settings"
+              >
+                {Icons.gear()}
+              </button>
+            </div>
           </div>
         </div>
 
