@@ -281,19 +281,28 @@ function SnipActions(props: { rect: SnipRect }) {
     const displayId = window.pen.env.displayId();
     void window.pen.snip.clear({ displayId });
   };
+  // After the user picks Copy or Save the snip is done — drop the
+  // overlay out of drawMode so it becomes click-through immediately,
+  // letting the user paste into another app or click around without
+  // the snip tool intercepting the next click. The snip tool stays
+  // selected, so re-enabling drawMode (⌘⇧D or status dot) jumps
+  // straight back into another selection.
+  const exitToIdle = (): void => {
+    void window.pen.hub.update({ drawMode: false });
+  };
   const onCopy = async (): Promise<void> => {
     await window.pen.snip.copy();
     clearSnip();
+    exitToIdle();
   };
   const onSave = (): void => {
     // The main process's captureFocusedDisplay picks up the existing
     // selection and writes a cropped PNG (going through the save
-    // dialog or the remembered folder).
+    // dialog or the remembered folder). capture.ts also clears the
+    // visual selection itself just before grabbing the pixels so it
+    // isn't baked into the PNG.
     void window.pen.relay.screenshot();
-    // Don't clear the selection here — capture.ts clears the visual
-    // selection itself just before grabbing the pixels so it isn't
-    // baked into the PNG, then we let the user know via the titlebar
-    // hint in the toolbar window.
+    exitToIdle();
   };
   const onCancel = (): void => clearSnip();
 
