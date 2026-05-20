@@ -574,28 +574,51 @@ html, body {
 }
 
 /* ─────────────────── MINIMIZED PILL ─────────────────── */
+/* Layout: outer .mini is the drag region (thin border around the
+   pill) so the user can still move the collapsed toolbar. The inner
+   .mini-logo fills almost the whole pill and is the click target
+   that restores — click events on drag regions are eaten by Electron,
+   so the previous setup (whole pill draggable, tiny logo span as the
+   only click target) made restoring fragile because users couldn't
+   reliably hit the 30px logo inside the 56px pill. */
 
 .mini {
   width: 100%;
   height: 100%;
+  position: relative;
+  cursor: pointer;
+  -webkit-app-region: drag;
+}
+.mini-logo {
+  appearance: none;
+  background: transparent;
+  border: none;
+  padding: 0;
+  color: inherit;
+  font: inherit;
+  position: absolute;
+  inset: 5px;
+  -webkit-app-region: no-drag;
   display: flex;
   align-items: center;
   justify-content: center;
+  border-radius: 8px;
   cursor: pointer;
-  -webkit-app-region: drag;
-  position: relative;
+  transition: background 0.15s, transform 0.15s cubic-bezier(0.2, 0.7, 0.2, 1);
 }
-.mini::after {
-  content: '';
-  position: absolute;
-  top: 5px;
-  width: 22px;
-  height: 3px;
-  border-radius: 2px;
-  background: var(--separator);
+.mini-logo:hover {
+  background: var(--hover);
+  transform: scale(1.04);
 }
-.mini-logo { -webkit-app-region: no-drag; display: inline-flex; }
-.mini-logo svg, .mini-logo img { width: 30px; height: 30px; border-radius: 6px; }
+.mini-logo:active { transform: scale(0.97); }
+.mini-logo svg,
+.mini-logo img {
+  width: 36px;
+  height: 36px;
+  border-radius: 7px;
+  object-fit: contain;
+  pointer-events: none; /* clicks land on .mini-logo, not the image */
+}
 
 /* ─────────────────── SETTINGS DROPDOWN ─────────────────── */
 

@@ -499,8 +499,16 @@ export function ToolbarApp() {
       <Show
         when={!hub().minimized}
         fallback={
-          <div class="mini" onClick={restore} title="Restore">
-            <span class="mini-logo">{Logo()}</span>
+          <div class="mini">
+            {/* Click target is the inner span (no-drag region). The
+                outer .mini is a thin drag border so the pill can
+                still be moved without expanding. */}
+            <button
+              class="mini-logo"
+              onClick={restore}
+              title="Restore toolbar"
+              aria-label="Restore toolbar"
+            >{Logo()}</button>
           </div>
         }
       >
