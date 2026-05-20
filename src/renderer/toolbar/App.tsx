@@ -4,15 +4,17 @@ import { PROFILES, PROFILE_ORDER } from '../../shared/profiles';
 import type {
   Orientation,
   ProfileId,
-  ScreenPermissionStatus,
   Theme,
   ToolId,
   ToolSettings,
   Whiteboard,
 } from '../../shared/types';
 import { Icons, Logo } from './icons';
-import { PermissionModal } from './PermissionModal';
-import { Toast, type ToastItem } from './Toast';
+
+// Status-panel discriminator. Both kinds reuse the existing
+// .settings-panel layout slot so they feel native to the toolbar
+// instead of floating as an out-of-place modal.
+type PanelKind = 'permission' | 'error';
 
 interface HubSnapshot {
   activeTool: ToolId;
@@ -95,21 +97,19 @@ export function ToolbarApp() {
     saveDir: null,
     alwaysAskSavePath: false,
   });
-  const [permModalOpen, setPermModalOpen] = createSignal(false);
-  const [permStatus, setPermStatus] = createSignal<ScreenPermissionStatus | null>(null);
-  const [toasts, setToasts] = createSignal<ToastItem[]>([]);
-  let toastSeq = 0;
-  const pushToast = (t: Omit<ToastItem, 'id'>): void => {
-    const item: ToastItem = { ...t, id: ++toastSeq };
-    setToasts((prev) => {
-      // Cap visible toasts at 3 — older ones fall off.
-      const next = [...prev, item];
-      return next.length > 3 ? next.slice(next.length - 3) : next;
-    });
-  };
-  const dismissToast = (id: number): void => {
-    setToasts((prev) => prev.filter((t) => t.id !== id));
-  };
+  // Status-panel state. Mutually exclusive with the settings panel —
+  // when one opens, the layout slot belongs to it. `panelError` holds
+  // the message body when panelKind === 'error'; `panelHint` is a
+  // small inline note shown under the body after a manual Recheck
+  // returns the same denied status.
+  const [panelKind, setPanelKind] = createSignal<PanelKind | null>(null);
+  const [panelError, setPanelError] = createSignal<string | null>(null);
+  const [panelHint, setPanelHint] = createSignal<string | null>(null);
+  // Set by capture:saved so the titlebar hint becomes a clickable
+  // 'Reveal' that opens the file's folder. Cleared on next hover hint
+  // or after revealMs.
+  const [revealPath, setRevealPath] = createSignal<string | null>(null);
+  let revealTimer: number | null = null;
   const [platform, setPlatform] = createSignal<NodeJS.Platform>('darwin');
   const [hint, setHint] = createSignal<string>('');
   const [settingsOnLeft, setSettingsOnLeft] = createSignal(false);
@@ -138,30 +138,54 @@ export function ToolbarApp() {
     onCleanup(off);
 
     // ── Permission + capture event wiring ────────────────────────
-    // Main process emits 'permissions:needed' the moment a capture
-    // can't proceed; we mount the modal. 'permissions:status' lets
-    // main inform us of the current screen-recording state — used by
-    // the modal's Recheck button.
-    const offNeeded = window.pen.permissions.onNeeded(() => setPermModalOpen(true));
+    // The main process emits 'permissions:needed' when a capture can't
+    // proceed, and 'capture:saved' / 'capture:error' after each
+    // attempt. We surface permission + error states as side panels
+    // (same slot as Settings), and successful saves as a brief
+    // clickable hint in the titlebar — much calmer than a floating
+    // toast inside a tiny toolbar window.
+    const offNeeded = window.pen.permissions.onNeeded(() => {
+      setPanelHint(null);
+      setPanelKind('permission');
+      // Close settings if it was occupying the slot.
+      if (hub().settingsOpen) void window.pen.hub.update({ settingsOpen: false });
+    });
     const offStatus = window.pen.permissions.onStatus((p) => {
-      setPermStatus(p.screen);
-      if (p.screen === 'granted') setPermModalOpen(false);
+      if (p.screen === 'granted') {
+        setPanelKind((k) => (k === 'permission' ? null : k));
+        setPanelHint(null);
+      } else if (panelKind() === 'permission') {
+        setPanelHint('Still off. Toggle Lekhini on under Screen Recording, then Recheck.');
+      }
     });
     const offSaved = window.pen.capture.onSaved((p) => {
-      pushToast({
-        kind: 'success',
-        message: `Saved to ${shortenPath(p.path)}`,
-        action: { label: 'Reveal', run: () => void window.pen.shell.openPath(p.path) },
-      });
+      // If we were showing an error panel, the user just successfully
+      // saved (e.g. via 'Pick new folder') — close the panel.
+      setPanelKind((k) => (k === 'error' ? null : k));
+      setPanelError(null);
+      // Inline confirmation in the titlebar hint, auto-clears at 4s.
+      setRevealPath(p.path);
+      setHint(`Saved · ${shortenPath(p.path)}`);
+      if (revealTimer !== null) window.clearTimeout(revealTimer);
+      revealTimer = window.setTimeout(() => {
+        setRevealPath(null);
+        setHint('');
+        revealTimer = null;
+      }, 4000);
     });
     const offError = window.pen.capture.onError((p) => {
-      pushToast({ kind: 'error', message: p.message });
+      setPanelError(p.message);
+      setPanelKind('error');
+      if (hub().settingsOpen) void window.pen.hub.update({ settingsOpen: false });
     });
+    window.addEventListener('focus', onWindowFocus);
     onCleanup(() => {
       offNeeded();
       offStatus();
       offSaved();
       offError();
+      window.removeEventListener('focus', onWindowFocus);
+      if (revealTimer !== null) window.clearTimeout(revealTimer);
     });
 
     const el = scrollRef;
@@ -264,15 +288,6 @@ export function ToolbarApp() {
     void window.pen.win.setContentSize({ axis: 'v', size: target });
   };
 
-  // Mirror the active theme onto <body> so Portal-mounted children
-  // (PermissionModal, Toast) inherit the same --bg / --text tokens.
-  // Without this, portal content renders into document.body which
-  // sits outside .bar's CSS-variable scope and falls back to black
-  // text on transparent — invisible against the dark toolbar.
-  createEffect(() => {
-    document.body.dataset.theme = hub().theme;
-  });
-
   // Re-measure after the DOM has settled following any state change that
   // affects content size. RAF defers to after Solid flushes its updates.
   createEffect(() => {
@@ -284,7 +299,14 @@ export function ToolbarApp() {
     void s.thicknessFlyoutOpen;
     void s.profile;
     void s.activeTool;
+    void panelKind();
     requestAnimationFrame(reportContentSize);
+  });
+
+  // Refresh which side the panel sits on whenever a status panel opens
+  // (mirrors the same logic the settings-open broadcast uses).
+  createEffect(() => {
+    if (panelKind() !== null) refreshSide();
   });
 
   // Whenever a side panel flips open, ask main which side of the screen
@@ -348,6 +370,42 @@ export function ToolbarApp() {
   };
   const closeSettings = () => void window.pen.hub.update({ settingsOpen: false });
 
+  // Status-panel actions.
+  const closePanel = () => {
+    setPanelKind(null);
+    setPanelError(null);
+    setPanelHint(null);
+  };
+  const recheckPermission = async () => {
+    const status = (await window.pen.permissions.check()) as {
+      screen: 'granted' | 'denied' | 'not-determined' | 'restricted' | 'unknown';
+    };
+    if (status.screen === 'granted') closePanel();
+    else setPanelHint('Still off. Toggle Lekhini on under Screen Recording, then Recheck.');
+  };
+  const openScreenPrefs = () => void window.pen.permissions.open('screen');
+  const pickFolderFromError = async () => {
+    const dir = (await window.pen.settings.pickSaveDir()) as string | null;
+    if (dir) {
+      void window.pen.hub.update({ saveDir: dir });
+      closePanel();
+    }
+  };
+  // Auto-recheck when the toolbar window regains focus — typical
+  // path is user opens System Settings, toggles Lekhini on, comes
+  // back. We only fire this while the permission panel is up so we
+  // don't badger the user otherwise.
+  const onWindowFocus = () => {
+    if (panelKind() === 'permission') void recheckPermission();
+  };
+
+  // Mirror the side-panel state into a CSS-friendly attribute so the
+  // existing layout rules (flex-direction switch in v-mode, etc.)
+  // apply uniformly whether settings or a status panel is open.
+  const sidePanelOpen = createMemo(() =>
+    hub().settingsOpen || panelKind() !== null,
+  );
+
   const showHint = (text: string) => setHint(text);
   const clearHint = () => setHint('');
   const isMac = createMemo(() => platform() === 'darwin');
@@ -375,7 +433,7 @@ export function ToolbarApp() {
       data-min={hub().minimized ? 'true' : 'false'}
       data-platform={isMac() ? 'mac' : 'win'}
       data-theme={hub().theme}
-      data-settings-open={hub().settingsOpen ? 'true' : 'false'}
+      data-settings-open={sidePanelOpen() ? 'true' : 'false'}
       data-settings-side={settingsOnLeft() ? 'left' : 'right'}
     >
       <Show
@@ -423,7 +481,14 @@ export function ToolbarApp() {
                 >
                   <span class="status-dot-pulse" />
                 </button>
-                <span class={`hint ${hint() ? 'has-hint' : ''}`}>{brandLine()}</span>
+                <span
+                  class={`hint ${hint() ? 'has-hint' : ''} ${revealPath() ? 'is-reveal' : ''}`}
+                  onClick={() => {
+                    const p = revealPath();
+                    if (p) void window.pen.shell.openPath(p);
+                  }}
+                  title={revealPath() ? 'Click to reveal in folder' : ''}
+                >{brandLine()}</span>
               </div>
 
               <div class="tb-side tb-right">
@@ -525,7 +590,14 @@ export function ToolbarApp() {
                 <span class="status-dot-pulse" />
               </button>
             </div>
-            <div class={`v-hint ${hint() ? 'has-hint' : ''}`} title={vertHintLine()}>
+            <div
+              class={`v-hint ${hint() ? 'has-hint' : ''} ${revealPath() ? 'is-reveal' : ''}`}
+              title={revealPath() ? 'Click to reveal in folder' : vertHintLine()}
+              onClick={() => {
+                const p = revealPath();
+                if (p) void window.pen.shell.openPath(p);
+              }}
+            >
               {vertHintLine()}
             </div>
           </Show>
@@ -814,13 +886,89 @@ export function ToolbarApp() {
             </div>
           </div>
         </Show>
+
+        {/* ─── STATUS PANEL (permission / save error) ──────────────
+             Reuses the .settings-panel layout slot so it docks like
+             the Settings panel and grows the toolbar window the same
+             way. Settings has render priority — we only show this
+             when the settings panel is closed. */}
+        <Show when={panelKind() !== null && !hub().settingsOpen}>
+          <div class="settings-panel status-panel" data-kind={panelKind()}>
+            <div class="settings-header">
+              <span class="settings-title">
+                {panelKind() === 'permission' ? 'Screen Recording' : "Couldn't save screenshot"}
+              </span>
+              <button
+                class="winctl"
+                onClick={closePanel}
+                onMouseEnter={() => showHint('Close')}
+                onMouseLeave={clearHint}
+                title="Close"
+              >{Icons.close()}</button>
+            </div>
+
+            <Show when={panelKind() === 'permission'}>
+              <div class="settings-section">
+                <div class="status-icon-row">
+                  <span class="status-icon">{Icons.camera()}</span>
+                  <div class="status-body">
+                    Lekhini needs Screen Recording permission to capture annotated
+                    screenshots.{' '}
+                    <Show when={isMac()}>
+                      macOS controls this — toggle Lekhini on under Privacy &amp;
+                      Security → Screen Recording, then return here. Lekhini
+                      retries automatically when you come back.
+                    </Show>
+                    <Show when={!isMac()}>
+                      You denied the system prompt last time. Try the screenshot
+                      button again to be asked once more.
+                    </Show>
+                  </div>
+                </div>
+                <Show when={panelHint()}>
+                  <div class="status-hint">{panelHint()}</div>
+                </Show>
+                <div class="status-actions">
+                  <Show when={isMac()}>
+                    <button
+                      class="settings-toggle status-btn-primary"
+                      onClick={openScreenPrefs}
+                    >
+                      Open System Settings
+                    </button>
+                  </Show>
+                  <button
+                    class="settings-toggle"
+                    onClick={() => void recheckPermission()}
+                  >
+                    Recheck
+                  </button>
+                </div>
+              </div>
+            </Show>
+
+            <Show when={panelKind() === 'error'}>
+              <div class="settings-section">
+                <div class="status-icon-row">
+                  <span class="status-icon status-icon-error">{Icons.clear()}</span>
+                  <div class="status-body">{panelError() ?? 'Unknown error.'}</div>
+                </div>
+                <div class="status-actions">
+                  <button
+                    class="settings-toggle status-btn-primary"
+                    onClick={() => void pickFolderFromError()}
+                  >
+                    Pick new folder
+                  </button>
+                  <button class="settings-toggle" onClick={closePanel}>
+                    Dismiss
+                  </button>
+                </div>
+              </div>
+            </Show>
+          </div>
+        </Show>
       </Show>
-      <PermissionModal
-        open={permModalOpen()}
-        lastStatus={permStatus()}
-        onClose={() => setPermModalOpen(false)}
-      />
-      <Toast items={toasts()} onDismiss={dismissToast} />
     </div>
   );
 }
