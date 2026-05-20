@@ -1,4 +1,4 @@
-import type { HubStateUpdate } from '../shared/types';
+import type { HubStateUpdate, ScreenPermissionStatus } from '../shared/types';
 
 declare global {
   interface Window {
@@ -50,8 +50,22 @@ declare global {
         setContentSize(payload: { axis: 'h' | 'v'; size: number }): Promise<void>;
       };
       permissions: {
-        check(): Promise<{ screen: string; accessibility: boolean }>;
+        check(): Promise<{ screen: ScreenPermissionStatus; accessibility: boolean }>;
         open(which: 'screen' | 'accessibility'): Promise<void>;
+        onNeeded(cb: (payload: { reason: 'screen' }) => void): () => void;
+        onStatus(cb: (payload: { screen: ScreenPermissionStatus }) => void): () => void;
+      };
+      capture: {
+        onSaved(cb: (payload: { path: string }) => void): () => void;
+        onError(
+          cb: (payload: { message: string; recoverable: boolean }) => void,
+        ): () => void;
+      };
+      settings: {
+        pickSaveDir(): Promise<string | null>;
+      };
+      shell: {
+        openPath(p: string): Promise<void>;
       };
       app: {
         info(): Promise<{ name: string; version: string }>;

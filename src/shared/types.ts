@@ -137,6 +137,8 @@ export type HubStateUpdate = {
   settingsOpen?: boolean;
   thicknessFlyoutOpen?: boolean;
   perToolWidth?: Partial<PerToolWidth>;
+  saveDir?: string | null;
+  alwaysAskSavePath?: boolean;
 };
 
 export type IpcChannel =
@@ -154,6 +156,8 @@ export type IpcChannel =
   | 'capture:screenshot:result'
   | 'capture:snip:result'
   | 'capture:trigger'
+  | 'capture:saved'
+  | 'capture:error'
   | 'snip:set'
   | 'snip:clear'
   | 'snip:copy'
@@ -167,4 +171,34 @@ export type IpcChannel =
   | 'toolbar:set-content-size'
   | 'app:info'
   | 'permissions:check'
-  | 'permissions:open';
+  | 'permissions:open'
+  | 'permissions:needed'
+  | 'permissions:status'
+  | 'settings:save-dir:pick'
+  | 'shell:open-path';
+
+export interface CaptureSaved {
+  path: string;
+}
+
+export interface CaptureError {
+  message: string;
+  recoverable: boolean;
+}
+
+export type PermissionReason = 'screen';
+
+export interface PermissionNeeded {
+  reason: PermissionReason;
+}
+
+export type ScreenPermissionStatus =
+  | 'granted'
+  | 'denied'
+  | 'not-determined'
+  | 'restricted'
+  | 'unknown';
+
+export interface PermissionStatus {
+  screen: ScreenPermissionStatus;
+}

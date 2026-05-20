@@ -8,6 +8,15 @@ export interface PersistedState {
   perToolWidth: { pencil: number; pen: number; eraser: number; highlighter: number };
   color: string;
   activeTool: ToolId;
+  // Save destination for screenshot / snip PNGs. `null` until the
+  // first save — the first save shows the OS dialog so the user
+  // explicitly picks a folder; that folder is then remembered and
+  // subsequent saves go straight to it with a timestamped filename.
+  saveDir: string | null;
+  // If true, every save shows the OS dialog regardless of saveDir.
+  // Off by default — the "remember + auto-save" UX is the recommended
+  // path. Lives in Settings → File save.
+  alwaysAskSavePath: boolean;
 }
 
 export const PERSISTED_DEFAULTS: PersistedState = {
@@ -19,6 +28,8 @@ export const PERSISTED_DEFAULTS: PersistedState = {
   perToolWidth: { pencil: 2, pen: 4, eraser: 20, highlighter: 18 },
   color: GRAPHITE_COLOR,
   activeTool: 'pencil',
+  saveDir: null,
+  alwaysAskSavePath: false,
 };
 
 interface MinimalStore {

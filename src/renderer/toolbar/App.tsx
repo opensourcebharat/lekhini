@@ -4,12 +4,15 @@ import { PROFILES, PROFILE_ORDER } from '../../shared/profiles';
 import type {
   Orientation,
   ProfileId,
+  ScreenPermissionStatus,
   Theme,
   ToolId,
   ToolSettings,
   Whiteboard,
 } from '../../shared/types';
 import { Icons, Logo } from './icons';
+import { PermissionModal } from './PermissionModal';
+import { Toast, type ToastItem } from './Toast';
 
 interface HubSnapshot {
   activeTool: ToolId;
@@ -23,6 +26,8 @@ interface HubSnapshot {
   settingsOpen: boolean;
   thicknessFlyoutOpen: boolean;
   perToolWidth: { pencil: number; pen: number; eraser: number; highlighter: number };
+  saveDir: string | null;
+  alwaysAskSavePath: boolean;
 }
 
 type FlyoutTool = 'pencil' | 'pen' | 'eraser' | 'highlighter';
@@ -60,6 +65,20 @@ const TOOL_BY_ID: Record<ToolId, ToolDef> = ALL_TOOLS.reduce(
   {} as Record<ToolId, ToolDef>,
 );
 
+// Display-friendly path: replace the home dir with `~` and ellipsize
+// the middle if the result is still long. Pure cosmetic — the toast
+// is narrow and a full POSIX path overflows.
+function shortenPath(p: string, max = 56): string {
+  let s = p;
+  // Best-effort home detection — `process.env.HOME` is not available
+  // in the renderer; fall back to the common macOS / Linux prefix.
+  const home = /^\/Users\/[^/]+/.exec(s)?.[0] ?? /^\/home\/[^/]+/.exec(s)?.[0];
+  if (home && s.startsWith(home)) s = '~' + s.slice(home.length);
+  if (s.length <= max) return s;
+  const tail = s.slice(-(max - 3));
+  return '…' + tail;
+}
+
 export function ToolbarApp() {
   const [hub, setHub] = createSignal<HubSnapshot>({
     activeTool: 'pencil',
@@ -73,7 +92,24 @@ export function ToolbarApp() {
     settingsOpen: false,
     thicknessFlyoutOpen: false,
     perToolWidth: { pencil: 3, pen: 4, eraser: 20, highlighter: 18 },
+    saveDir: null,
+    alwaysAskSavePath: false,
   });
+  const [permModalOpen, setPermModalOpen] = createSignal(false);
+  const [permStatus, setPermStatus] = createSignal<ScreenPermissionStatus | null>(null);
+  const [toasts, setToasts] = createSignal<ToastItem[]>([]);
+  let toastSeq = 0;
+  const pushToast = (t: Omit<ToastItem, 'id'>): void => {
+    const item: ToastItem = { ...t, id: ++toastSeq };
+    setToasts((prev) => {
+      // Cap visible toasts at 3 — older ones fall off.
+      const next = [...prev, item];
+      return next.length > 3 ? next.slice(next.length - 3) : next;
+    });
+  };
+  const dismissToast = (id: number): void => {
+    setToasts((prev) => prev.filter((t) => t.id !== id));
+  };
   const [platform, setPlatform] = createSignal<NodeJS.Platform>('darwin');
   const [hint, setHint] = createSignal<string>('');
   const [settingsOnLeft, setSettingsOnLeft] = createSignal(false);
@@ -100,6 +136,33 @@ export function ToolbarApp() {
       if (s.settingsOpen) refreshSide();
     });
     onCleanup(off);
+
+    // ── Permission + capture event wiring ────────────────────────
+    // Main process emits 'permissions:needed' the moment a capture
+    // can't proceed; we mount the modal. 'permissions:status' lets
+    // main inform us of the current screen-recording state — used by
+    // the modal's Recheck button.
+    const offNeeded = window.pen.permissions.onNeeded(() => setPermModalOpen(true));
+    const offStatus = window.pen.permissions.onStatus((p) => {
+      setPermStatus(p.screen);
+      if (p.screen === 'granted') setPermModalOpen(false);
+    });
+    const offSaved = window.pen.capture.onSaved((p) => {
+      pushToast({
+        kind: 'success',
+        message: `Saved to ${shortenPath(p.path)}`,
+        action: { label: 'Reveal', run: () => void window.pen.shell.openPath(p.path) },
+      });
+    });
+    const offError = window.pen.capture.onError((p) => {
+      pushToast({ kind: 'error', message: p.message });
+    });
+    onCleanup(() => {
+      offNeeded();
+      offStatus();
+      offSaved();
+      offError();
+    });
 
     const el = scrollRef;
     if (!el) return;
@@ -263,6 +326,12 @@ export function ToolbarApp() {
     void window.pen.hub.update({ theme: hub().theme === 'dark' ? 'light' : 'dark' });
   };
   const setProfile = (p: ProfileId) => void window.pen.hub.update({ profile: p });
+  const toggleAlwaysAsk = () =>
+    void window.pen.hub.update({ alwaysAskSavePath: !hub().alwaysAskSavePath });
+  const pickSaveDir = async () => {
+    const dir = (await window.pen.settings.pickSaveDir()) as string | null;
+    if (dir) void window.pen.hub.update({ saveDir: dir });
+  };
   const toggleSettings = () => {
     const next = !hub().settingsOpen;
     if (next) refreshSide();
@@ -693,6 +762,31 @@ export function ToolbarApp() {
             </div>
 
             <div class="settings-section">
+              <div class="settings-section-label">File save</div>
+              <div class="settings-row">
+                <span class="settings-row-label">Always ask where to save</span>
+                <button
+                  class={`settings-toggle ${hub().alwaysAskSavePath ? 'on' : ''}`}
+                  onClick={toggleAlwaysAsk}
+                >
+                  <span>{hub().alwaysAskSavePath ? 'On' : 'Off'}</span>
+                </button>
+              </div>
+              <div class="settings-row settings-row-stack">
+                <span class="settings-row-label">Save folder</span>
+                <button
+                  class="settings-toggle settings-toggle-wide"
+                  onClick={() => void pickSaveDir()}
+                  title={hub().saveDir ?? 'Not chosen yet'}
+                >
+                  <span class="settings-path">
+                    {hub().saveDir ? shortenPath(hub().saveDir!, 28) : 'Choose…'}
+                  </span>
+                </button>
+              </div>
+            </div>
+
+            <div class="settings-section">
               <div class="settings-section-label">About</div>
               <div class="about-card">
                 <div class="about-header">
@@ -712,6 +806,12 @@ export function ToolbarApp() {
           </div>
         </Show>
       </Show>
+      <PermissionModal
+        open={permModalOpen()}
+        lastStatus={permStatus()}
+        onClose={() => setPermModalOpen(false)}
+      />
+      <Toast items={toasts()} onDismiss={dismissToast} />
     </div>
   );
 }

@@ -27,6 +27,8 @@ export interface HubState {
   settingsOpen: boolean;
   thicknessFlyoutOpen: boolean;
   perToolWidth: PerToolWidth;
+  saveDir: string | null;
+  alwaysAskSavePath: boolean;
 }
 
 const state: HubState = {
@@ -42,6 +44,8 @@ const state: HubState = {
   settingsOpen: false,
   thicknessFlyoutOpen: false,
   perToolWidth: { pencil: 3, pen: 4, eraser: 20, highlighter: 18 },
+  saveDir: null,
+  alwaysAskSavePath: false,
 };
 
 const subscribers = new Set<BrowserWindow>();
@@ -100,6 +104,10 @@ export function hydrateFromPersistence(): void {
     highlighter: typeof storedW.highlighter === 'number' ? storedW.highlighter : PERSISTED_DEFAULTS.perToolWidth.highlighter,
   };
   state.activeTool = VALID_TOOLS.has(p.activeTool) ? p.activeTool : 'pencil';
+  // Save destination: null until the user picks one. Schema-tolerant —
+  // older installs without this key fall through to the default.
+  state.saveDir = typeof p.saveDir === 'string' ? p.saveDir : null;
+  state.alwaysAskSavePath = typeof p.alwaysAskSavePath === 'boolean' ? p.alwaysAskSavePath : false;
   // If the active tool is pencil, the canonical color is graphite —
   // don't restore a stray non-graphite value from a previous session.
   const colorForTool =
@@ -246,6 +254,19 @@ export function patch(update: HubStateUpdate) {
       state.settingsOpen = false;
       changed.add('settingsOpen');
     }
+  }
+  if (update.saveDir !== undefined && update.saveDir !== state.saveDir) {
+    state.saveDir = update.saveDir;
+    changed.add('saveDir');
+    save('saveDir', state.saveDir);
+  }
+  if (
+    update.alwaysAskSavePath !== undefined &&
+    update.alwaysAskSavePath !== state.alwaysAskSavePath
+  ) {
+    state.alwaysAskSavePath = update.alwaysAskSavePath;
+    changed.add('alwaysAskSavePath');
+    save('alwaysAskSavePath', state.alwaysAskSavePath);
   }
   broadcast(changed);
 }

@@ -63,6 +63,31 @@ const api = {
     check: () => ipcRenderer.invoke('permissions:check' satisfies IpcChannel),
     open: (which: 'screen' | 'accessibility') =>
       ipcRenderer.invoke('permissions:open' satisfies IpcChannel, which),
+    onNeeded: (cb: (payload: { reason: 'screen' }) => void) =>
+      bind('permissions:needed', cb as (v: unknown) => void),
+    onStatus: (
+      cb: (payload: {
+        screen: 'granted' | 'denied' | 'not-determined' | 'restricted' | 'unknown';
+      }) => void,
+    ) => bind('permissions:status', cb as (v: unknown) => void),
+  },
+  capture: {
+    onSaved: (cb: (payload: { path: string }) => void) =>
+      bind('capture:saved', cb as (v: unknown) => void),
+    onError: (cb: (payload: { message: string; recoverable: boolean }) => void) =>
+      bind('capture:error', cb as (v: unknown) => void),
+  },
+  settings: {
+    // saveDir + alwaysAskSavePath are part of HubState — write them
+    // via `pen.hub.update({ saveDir, alwaysAskSavePath })`. This
+    // method only opens the OS folder-picker dialog and returns the
+    // chosen path so the renderer can patch the hub with it.
+    pickSaveDir: () =>
+      ipcRenderer.invoke('settings:save-dir:pick' satisfies IpcChannel) as Promise<string | null>,
+  },
+  shell: {
+    openPath: (p: string) =>
+      ipcRenderer.invoke('shell:open-path' satisfies IpcChannel, p),
   },
   app: {
     info: () =>
