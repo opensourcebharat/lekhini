@@ -196,6 +196,20 @@ export interface ConnectionTestResult {
   latencyMs?: number;
 }
 
+// Payload of the chat:session broadcast — sent from main to every
+// renderer when SnipActions kicks off a new AI chat. The toolbar's
+// ChatPanel picks this up to render the image thumbnail + auto-fire
+// the first turn against the configured provider.
+export interface ChatSessionPayload {
+  sessionId: string;
+  png: Uint8Array;
+  mime: string;
+  // The profile the user was in when they clicked Ask AI. Stays
+  // bound to the chat — profile switches mid-conversation don't
+  // retroactively re-prime the system prompt.
+  profile: ProfileId;
+}
+
 export type IpcChannel =
   | 'hub:state:get'
   | 'hub:state:update'
@@ -240,7 +254,17 @@ export type IpcChannel =
   | 'ai:test-connection'
   | 'ai:ask'
   | 'ai:cancel'
-  | 'ai:chunk';
+  | 'ai:chunk'
+  // Cross-window chat-session handoff: overlay's SnipActions starts
+  // a chat with a snip image; main broadcasts a session event so the
+  // toolbar's ChatPanel receives the image and opens.
+  | 'chat:start'
+  | 'chat:session'
+  // Renderer-friendly shortcut: ask AI about the current snip
+  // selection. Main captures + composites the focused display's
+  // snip (same path as Save), then internally calls chat:start with
+  // the bytes — no need for the renderer to handle PNG capture.
+  | 'snip:ask-ai';
 
 export interface CaptureSaved {
   path: string;

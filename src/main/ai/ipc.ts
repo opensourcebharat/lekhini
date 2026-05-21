@@ -2,12 +2,15 @@ import { BrowserWindow, ipcMain } from 'electron';
 import type {
   AiStatus,
   AskInput,
+  ChatSessionPayload,
   ConnectionTestResult,
+  ProfileId,
   ProviderId,
   StreamChunk,
 } from '../../shared/types';
 import { deleteKey, getKey, hasKey, setKey } from './credentials';
 import { getAdapter } from './registry';
+import { patch as patchHub } from '../hub';
 
 // Active in-flight requests, keyed by the requestId we hand back to
 // the renderer. Lets the chat panel cancel a stream cleanly via
@@ -149,4 +152,37 @@ export function registerAiIpc(): void {
     if (ctrl) ctrl.abort();
     inFlight.delete(payload.requestId);
   });
+
+  // Renderer-facing chat:start handler. Calls startChatSession with
+  // the bytes the renderer hands over. Equivalent to the in-process
+  // startChatSession call that capture.ts makes for the snip-ask path.
+  ipcMain.handle(
+    'chat:start',
+    (_evt, payload: { png: Uint8Array; mime: string; profile: ProfileId }) => {
+      const sessionId = startChatSession(
+        Buffer.from(payload.png),
+        payload.mime,
+        payload.profile,
+      );
+      return { sessionId };
+    },
+  );
+}
+
+// Shared helper: broadcast a new chat session to every renderer and
+// open the dock-slot chat panel. Called by the chat:start IPC and
+// also by capture.ts when Ask AI is triggered from the snip menu.
+let chatSeq = 0;
+export function startChatSession(
+  png: Buffer,
+  mime: string,
+  profile: ProfileId,
+): string {
+  const sessionId = `chat-${Date.now()}-${++chatSeq}`;
+  const session: ChatSessionPayload = { sessionId, png, mime, profile };
+  for (const win of BrowserWindow.getAllWindows()) {
+    if (!win.isDestroyed()) win.webContents.send('chat:session', session);
+  }
+  patchHub({ chatOpen: true });
+  return sessionId;
 }

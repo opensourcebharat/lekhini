@@ -5,7 +5,7 @@ import { attachPointerPipeline } from './canvas/pointerPipeline';
 import { cursorFor } from './cursors';
 import { store, type SnipRect } from './store';
 import { buildRegistry } from './tools/registry';
-import type { Item, Theme, ToolSettings, Whiteboard } from '../../shared/types';
+import type { Item, ProfileId, Theme, ToolSettings, Whiteboard } from '../../shared/types';
 import type { Tool, ToolContext } from './tools/types';
 
 export function OverlayApp() {
@@ -19,6 +19,10 @@ export function OverlayApp() {
   // can re-render on Solid's signal cycle. Synced inside the store
   // subscriber below.
   const [snipRectSig, setSnipRectSig] = createSignal<SnipRect | null>(null);
+  // AI-configuration mirror + current profile, used by the SnipActions
+  // Ask AI button. Updated from hub.onBroadcast below.
+  const [aiConfigured, setAiConfigured] = createSignal(false);
+  const [activeProfile, setActiveProfile] = createSignal<ProfileId>('general');
   let currentTheme: Theme = 'dark';
 
   const applyCursor = () => {
@@ -175,6 +179,8 @@ export function OverlayApp() {
         whiteboard?: Whiteboard;
         theme?: Theme;
         thicknessFlyoutOpen?: boolean;
+        aiActiveProvider?: string | null;
+        profile?: ProfileId;
       };
       if (s.activeTool) store.getState().setActiveTool(s.activeTool as never);
       if (typeof s.drawMode === 'boolean') store.getState().setDrawMode(s.drawMode);
@@ -187,6 +193,8 @@ export function OverlayApp() {
       if (typeof s.thicknessFlyoutOpen === 'boolean') {
         toolbarFlyoutOpen = s.thicknessFlyoutOpen;
       }
+      if ('aiActiveProvider' in s) setAiConfigured(s.aiActiveProvider != null);
+      if (s.profile) setActiveProfile(s.profile);
     });
 
     void window.pen.hub.get().then((state) => {
@@ -197,6 +205,8 @@ export function OverlayApp() {
         whiteboard: Whiteboard;
         theme?: Theme;
         thicknessFlyoutOpen?: boolean;
+        aiActiveProvider?: string | null;
+        profile?: ProfileId;
       };
       store.getState().setActiveTool(s.activeTool as never);
       store.getState().setDrawMode(s.drawMode);
@@ -206,6 +216,8 @@ export function OverlayApp() {
       if (typeof s.thicknessFlyoutOpen === 'boolean') {
         toolbarFlyoutOpen = s.thicknessFlyoutOpen;
       }
+      setAiConfigured(s.aiActiveProvider != null);
+      if (s.profile) setActiveProfile(s.profile);
       applyCursor();
     });
 
@@ -263,7 +275,13 @@ export function OverlayApp() {
           (Order matters: snipRectSig() goes last so the && chain
           resolves to the SnipRect itself for Show's accessor.) */}
       <Show when={drawMode() && activeTool() === 'snip' && snipRectSig()}>
-        {(rect) => <SnipActions rect={rect()} />}
+        {(rect) => (
+          <SnipActions
+            rect={rect()}
+            aiConfigured={aiConfigured()}
+            profile={activeProfile()}
+          />
+        )}
       </Show>
     </div>
   );
@@ -273,15 +291,19 @@ export function OverlayApp() {
 // Anchored at the bottom-right corner of the rect with a small offset.
 // Falls back to inside-rect-bottom-right if the rect is too close to
 // the screen edge to fit the menu below it.
-function SnipActions(props: { rect: SnipRect }) {
-  const MENU_W = 168;
+function SnipActions(props: {
+  rect: SnipRect;
+  aiConfigured: boolean;
+  profile: ProfileId;
+}) {
+  // Wider menu when the Ask AI button is showing so the four buttons
+  // fit in one row without wrapping.
+  const MENU_W = () => (props.aiConfigured ? 232 : 168);
   const MENU_H = 32;
   const GAP = 8;
-  // Tracks an in-flight Copy so the button can show 'Copying…' and
-  // block double-clicks. Save is fire-and-forget (capture goes
-  // through the toolbar's save flow), so it doesn't get a busy state
-  // — the menu just dismisses immediately.
-  const [busy, setBusy] = createSignal<'copy' | null>(null);
+  // Tracks an in-flight Copy / AskAi so the button can show its
+  // busy label and block double-clicks. Save is fire-and-forget.
+  const [busy, setBusy] = createSignal<'copy' | 'ask' | null>(null);
 
   const clearSnip = (): void => {
     const displayId = window.pen.env.displayId();
@@ -316,21 +338,38 @@ function SnipActions(props: { rect: SnipRect }) {
     void window.pen.relay.screenshot();
     exitToIdle();
   };
+  const onAskAi = async (): Promise<void> => {
+    if (busy()) return;
+    setBusy('ask');
+    try {
+      // Main captures + composites + broadcasts chat:session →
+      // toolbar's ChatPanel picks it up and fires the first AI turn.
+      // Selection is cleared by capture.ts during the capture (same
+      // path Save / Copy use).
+      await window.pen.snip.askAi(props.profile);
+    } finally {
+      setBusy(null);
+      // Don't exitToIdle here — the user might want to keep snipping
+      // while chatting. The chat panel is in the toolbar window; the
+      // overlay stays interactive.
+    }
+  };
   const onCancel = (): void => clearSnip();
 
   const positioned = (): { left: string; top: string } => {
     const r = props.rect;
     const winW = window.innerWidth;
     const winH = window.innerHeight;
+    const menuW = MENU_W();
     // Default: below the rect, right-aligned to its right edge.
-    let left = r.x + r.w - MENU_W;
+    let left = r.x + r.w - menuW;
     let top = r.y + r.h + GAP;
     // If it would overflow the bottom of the screen, place ABOVE the rect.
     if (top + MENU_H > winH - 4) top = r.y - MENU_H - GAP;
     // If still off-screen (very tall rect near top), tuck inside the rect.
     if (top < 4) top = Math.min(r.y + r.h - MENU_H - GAP, winH - MENU_H - 4);
     // Horizontal clamping: never let the menu fall off either edge.
-    left = Math.max(4, Math.min(left, winW - MENU_W - 4));
+    left = Math.max(4, Math.min(left, winW - menuW - 4));
     return { left: `${left}px`, top: `${top}px` };
   };
 
@@ -356,6 +395,16 @@ function SnipActions(props: { rect: SnipRect }) {
       >
         Save
       </button>
+      <Show when={props.aiConfigured}>
+        <button
+          class="snip-action snip-action-ai"
+          onClick={() => void onAskAi()}
+          disabled={busy() !== null}
+          title="Send this snip to the AI for analysis"
+        >
+          {busy() === 'ask' ? 'Asking…' : 'Ask AI'}
+        </button>
+      </Show>
       <button
         class="snip-action snip-action-quiet"
         onClick={onCancel}

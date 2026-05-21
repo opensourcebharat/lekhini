@@ -1,8 +1,10 @@
 import type {
   AiStatus,
   AskInput,
+  ChatSessionPayload,
   ConnectionTestResult,
   HubStateUpdate,
+  ProfileId,
   ProviderId,
   ScreenPermissionStatus,
   StreamChunk,
@@ -43,6 +45,7 @@ declare global {
         }): Promise<void>;
         clear(payload: { displayId: number }): Promise<void>;
         copy(): Promise<void>;
+        askAi(profile: ProfileId): Promise<void>;
       };
       relay: {
         undo(): Promise<void>;
@@ -89,6 +92,14 @@ declare global {
         ask(input: AskInput): Promise<{ requestId: string }>;
         cancel(requestId: string): Promise<void>;
         onChunk(cb: (c: StreamChunk) => void): () => void;
+      };
+      chat: {
+        start(payload: {
+          png: Uint8Array;
+          mime: string;
+          profile: ProfileId;
+        }): Promise<{ sessionId: string }>;
+        onSession(cb: (s: ChatSessionPayload) => void): () => void;
       };
       app: {
         info(): Promise<{ name: string; version: string; packaged: boolean }>;

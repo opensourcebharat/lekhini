@@ -1,15 +1,60 @@
 import { createEffect, createMemo, createSignal, For, onMount, onCleanup, Show } from 'solid-js';
 import { COLOR_PRESETS, THICKNESS_PRESETS } from '../../shared/constants';
-import { PROFILES, PROFILE_ORDER } from '../../shared/profiles';
+import { PROFILES, PROFILE_ORDER, resolveAiPrompt } from '../../shared/profiles';
 import type {
+  AiStatus,
+  ConnectionTestResult,
   Orientation,
   ProfileId,
+  ProviderId,
   Theme,
   ToolId,
   ToolSettings,
   Whiteboard,
 } from '../../shared/types';
 import { Icons, Logo } from './icons';
+import { ChatPanel } from './ChatPanel';
+
+const PROVIDER_LABELS: Record<ProviderId, string> = {
+  anthropic: 'Anthropic Claude',
+  openai: 'OpenAI ChatGPT',
+  gemini: 'Google Gemini',
+};
+
+const PROVIDER_KEY_URLS: Record<ProviderId, string> = {
+  anthropic: 'https://console.anthropic.com/settings/keys',
+  openai: 'https://platform.openai.com/api-keys',
+  gemini: 'https://aistudio.google.com/app/apikey',
+};
+
+interface ModelOption {
+  id: string;
+  label: string;
+}
+
+// Kept in sync with src/main/ai/registry.ts. A static mirror is fine
+// — the list rotates with SDK releases, not user input.
+const MODELS_BY_PROVIDER: Record<ProviderId, ModelOption[]> = {
+  anthropic: [
+    { id: 'claude-sonnet-4-5', label: 'Claude Sonnet 4.5 (recommended)' },
+    { id: 'claude-opus-4-5', label: 'Claude Opus 4.5' },
+    { id: 'claude-haiku-4-5', label: 'Claude Haiku 4.5 (fast / cheap)' },
+  ],
+  openai: [
+    { id: 'gpt-4o', label: 'GPT-4o (recommended)' },
+    { id: 'gpt-4o-mini', label: 'GPT-4o mini (fast / cheap)' },
+  ],
+  gemini: [
+    { id: 'gemini-2.0-flash', label: 'Gemini 2.0 Flash (recommended)' },
+    { id: 'gemini-1.5-pro', label: 'Gemini 1.5 Pro' },
+  ],
+};
+
+const DEFAULT_MODEL: Record<ProviderId, string> = {
+  anthropic: 'claude-sonnet-4-5',
+  openai: 'gpt-4o',
+  gemini: 'gemini-2.0-flash',
+};
 
 // Status-panel discriminator. Both kinds reuse the existing
 // .settings-panel layout slot so they feel native to the toolbar
@@ -31,6 +76,10 @@ interface HubSnapshot {
   saveDir: string | null;
   alwaysAskSavePath: boolean;
   statusPanelOpen: boolean;
+  chatOpen: boolean;
+  aiActiveProvider: ProviderId | null;
+  aiActiveModel: string | null;
+  aiProfilePrompts: Partial<Record<ProfileId, string>>;
 }
 
 type FlyoutTool = 'pencil' | 'pen' | 'eraser' | 'highlighter';
@@ -114,6 +163,10 @@ export function ToolbarApp() {
     saveDir: null,
     alwaysAskSavePath: false,
     statusPanelOpen: false,
+    chatOpen: false,
+    aiActiveProvider: null,
+    aiActiveModel: null,
+    aiProfilePrompts: {},
   });
   // Status-panel state. Mutually exclusive with the settings panel —
   // when one opens, the layout slot belongs to it. `panelError` holds
@@ -147,6 +200,45 @@ export function ToolbarApp() {
   let scrollRef: HTMLDivElement | undefined;
   let barMainRef: HTMLDivElement | undefined;
 
+  // ── AI Settings section state ───────────────────────────────────
+  // aiStatus tells us which providers have a key (renderer never sees
+  // the key itself). Selected dropdown values + keyInput are local
+  // working state until the user clicks Save.
+  const [aiStatus, setAiStatus] = createSignal<AiStatus[]>([]);
+  const [aiSelectedProvider, setAiSelectedProvider] = createSignal<ProviderId>('anthropic');
+  const [aiSelectedModel, setAiSelectedModel] = createSignal<string>(
+    DEFAULT_MODEL.anthropic,
+  );
+  const [aiKeyInput, setAiKeyInput] = createSignal('');
+  const [aiTestResult, setAiTestResult] = createSignal<ConnectionTestResult | null>(null);
+  const [aiBusy, setAiBusy] = createSignal<'saving' | 'testing' | null>(null);
+
+  const refreshAiStatus = async (): Promise<void> => {
+    const status = await window.pen.ai.getStatus();
+    setAiStatus(status);
+  };
+
+  const isProviderConfigured = (id: ProviderId): boolean =>
+    aiStatus().find((s) => s.provider === id)?.configured ?? false;
+
+  // Whenever the selected provider changes, snap the model dropdown
+  // to that provider's default (unless it's already a valid model
+  // for the provider — e.g. when the hub broadcasts an existing pair).
+  createEffect(() => {
+    const p = aiSelectedProvider();
+    const valid = MODELS_BY_PROVIDER[p].some((m) => m.id === aiSelectedModel());
+    if (!valid) setAiSelectedModel(DEFAULT_MODEL[p]);
+  });
+
+  // Sync the selected dropdowns to the persisted active provider
+  // once the hub state arrives.
+  createEffect(() => {
+    const ap = hub().aiActiveProvider;
+    const am = hub().aiActiveModel;
+    if (ap) setAiSelectedProvider(ap);
+    if (am) setAiSelectedModel(am);
+  });
+
   onMount(() => {
     void window.pen.hub.get().then((state) => {
       const s = state as HubSnapshot;
@@ -155,6 +247,7 @@ export function ToolbarApp() {
     });
     void window.pen.win.platform().then(setPlatform);
     void window.pen.app.info().then(setAppInfo);
+    void refreshAiStatus();
     const off = window.pen.hub.onBroadcast((state) => {
       const s = state as HubSnapshot;
       setHub(s);
@@ -329,6 +422,7 @@ export function ToolbarApp() {
     void s.minimized;
     void s.settingsOpen;
     void s.statusPanelOpen;
+    void s.chatOpen;
     void s.thicknessFlyoutOpen;
     void s.profile;
     void s.activeTool;
@@ -470,11 +564,84 @@ export function ToolbarApp() {
     if (panelKind() === 'permission') void recheckPermission();
   };
 
+  // ── AI action handlers ─────────────────────────────────────────
+  const saveAiKey = async (): Promise<void> => {
+    const key = aiKeyInput().trim();
+    if (key.length === 0) return;
+    setAiBusy('saving');
+    try {
+      await window.pen.ai.setKey(aiSelectedProvider(), key);
+      await refreshAiStatus();
+      setAiKeyInput('');
+      // Snap the active provider/model to what was just configured
+      // so the Ask AI button knows what to use.
+      void window.pen.hub.update({
+        aiActiveProvider: aiSelectedProvider(),
+        aiActiveModel: aiSelectedModel(),
+      });
+      setAiTestResult({ ok: true, message: 'Key saved' });
+    } finally {
+      setAiBusy(null);
+    }
+  };
+  const deleteAiKey = async (): Promise<void> => {
+    await window.pen.ai.deleteKey(aiSelectedProvider());
+    await refreshAiStatus();
+    setAiTestResult(null);
+    // If we just deleted the active provider's key, clear it from
+    // hub so the Ask AI button hides.
+    if (hub().aiActiveProvider === aiSelectedProvider()) {
+      void window.pen.hub.update({
+        aiActiveProvider: null,
+        aiActiveModel: null,
+      });
+    }
+  };
+  const testAiConnection = async (): Promise<void> => {
+    setAiBusy('testing');
+    setAiTestResult(null);
+    try {
+      const result = await window.pen.ai.testConnection(
+        aiSelectedProvider(),
+        aiSelectedModel(),
+      );
+      setAiTestResult(result);
+    } finally {
+      setAiBusy(null);
+    }
+  };
+  const setProfilePrompt = (profile: ProfileId, text: string): void => {
+    void window.pen.hub.update({
+      aiProfilePrompts: { [profile]: text },
+    });
+  };
+  const resetProfilePrompt = (profile: ProfileId): void => {
+    // Empty-string override is treated as "no override" by hub.patch,
+    // so the default from PROFILES kicks back in.
+    void window.pen.hub.update({
+      aiProfilePrompts: { [profile]: '' },
+    });
+  };
+  // Active model picker: whenever the user changes the model dropdown
+  // for the ALREADY-CONFIGURED active provider, persist that choice.
+  const onModelChange = (model: string): void => {
+    setAiSelectedModel(model);
+    if (
+      hub().aiActiveProvider === aiSelectedProvider() &&
+      model !== hub().aiActiveModel
+    ) {
+      void window.pen.hub.update({ aiActiveModel: model });
+    }
+  };
+  const closeChat = (): void => {
+    void window.pen.hub.update({ chatOpen: false });
+  };
+
   // Mirror the side-panel state into a CSS-friendly attribute so the
   // existing layout rules (flex-direction switch in v-mode, etc.)
   // apply uniformly whether settings or a status panel is open.
   const sidePanelOpen = createMemo(() =>
-    hub().settingsOpen || panelKind() !== null,
+    hub().settingsOpen || panelKind() !== null || hub().chatOpen,
   );
 
   const showHint = (text: string) => setHint(text);
@@ -904,6 +1071,155 @@ export function ToolbarApp() {
               </div>
             </div>
 
+            <div class="settings-section ai-section">
+              <div class="settings-section-label">AI</div>
+              <div class="settings-row settings-row-stack">
+                <span class="settings-row-label">Provider</span>
+                <select
+                  class="settings-toggle settings-toggle-wide ai-select"
+                  value={aiSelectedProvider()}
+                  onChange={(e) =>
+                    setAiSelectedProvider(
+                      (e.currentTarget as HTMLSelectElement).value as ProviderId,
+                    )
+                  }
+                >
+                  <For each={Object.keys(PROVIDER_LABELS) as ProviderId[]}>
+                    {(p) => (
+                      <option value={p}>
+                        {PROVIDER_LABELS[p]}
+                        {isProviderConfigured(p) ? ' · configured' : ''}
+                      </option>
+                    )}
+                  </For>
+                </select>
+              </div>
+              <div class="settings-row settings-row-stack">
+                <span class="settings-row-label">Model</span>
+                <select
+                  class="settings-toggle settings-toggle-wide ai-select"
+                  value={aiSelectedModel()}
+                  onChange={(e) =>
+                    onModelChange((e.currentTarget as HTMLSelectElement).value)
+                  }
+                >
+                  <For each={MODELS_BY_PROVIDER[aiSelectedProvider()]}>
+                    {(m) => <option value={m.id}>{m.label}</option>}
+                  </For>
+                </select>
+              </div>
+              <div class="settings-row settings-row-stack">
+                <span class="settings-row-label">
+                  API key
+                  <Show when={isProviderConfigured(aiSelectedProvider())}>
+                    <span class="ai-badge-configured">● Configured</span>
+                  </Show>
+                </span>
+                <input
+                  class="ai-key-input"
+                  type="password"
+                  autocomplete="off"
+                  spellcheck={false}
+                  placeholder={
+                    isProviderConfigured(aiSelectedProvider())
+                      ? 'Replace key…'
+                      : 'Paste API key'
+                  }
+                  value={aiKeyInput()}
+                  onInput={(e) =>
+                    setAiKeyInput((e.currentTarget as HTMLInputElement).value)
+                  }
+                />
+                <div class="ai-key-actions">
+                  <button
+                    class="settings-toggle"
+                    onClick={() => void saveAiKey()}
+                    disabled={aiKeyInput().trim().length === 0 || aiBusy() !== null}
+                  >
+                    {aiBusy() === 'saving' ? 'Saving…' : 'Save'}
+                  </button>
+                  <button
+                    class="settings-toggle"
+                    onClick={() => void testAiConnection()}
+                    disabled={
+                      !isProviderConfigured(aiSelectedProvider()) || aiBusy() !== null
+                    }
+                  >
+                    {aiBusy() === 'testing' ? 'Testing…' : 'Test'}
+                  </button>
+                  <Show when={isProviderConfigured(aiSelectedProvider())}>
+                    <button
+                      class="settings-toggle ai-key-delete"
+                      onClick={() => void deleteAiKey()}
+                      title="Remove the saved key for this provider"
+                    >
+                      Delete
+                    </button>
+                  </Show>
+                </div>
+                <Show when={aiTestResult()}>
+                  {(r) => (
+                    <div
+                      class={`ai-test-result ${r().ok ? 'ok' : 'fail'}`}
+                    >
+                      {r().ok
+                        ? `✓ ${r().message ?? 'OK'}${
+                            r().latencyMs ? ` · ${r().latencyMs}ms` : ''
+                          }`
+                        : `✗ ${r().message ?? 'Failed'}`}
+                    </div>
+                  )}
+                </Show>
+                <a
+                  class="ai-key-link"
+                  href={PROVIDER_KEY_URLS[aiSelectedProvider()]}
+                  onClick={(e) => {
+                    e.preventDefault();
+                    void window.pen.shell.openPath(PROVIDER_KEY_URLS[aiSelectedProvider()]);
+                  }}
+                >
+                  Get a key →
+                </a>
+              </div>
+              <div class="settings-row settings-row-stack">
+                <span class="settings-row-label">Profile prompts</span>
+                <For each={PROFILE_ORDER}>
+                  {(pid) => (
+                    <div class="ai-prompt-row">
+                      <div class="ai-prompt-row-head">
+                        <span class="ai-prompt-row-label">{PROFILES[pid].label}</span>
+                        <Show when={hub().aiProfilePrompts[pid]}>
+                          <button
+                            class="ai-prompt-reset"
+                            onClick={() => resetProfilePrompt(pid)}
+                            title="Restore the built-in prompt"
+                          >
+                            Reset
+                          </button>
+                        </Show>
+                      </div>
+                      <textarea
+                        class="ai-prompt-textarea"
+                        rows={3}
+                        value={resolveAiPrompt(pid, hub().aiProfilePrompts)}
+                        onChange={(e) =>
+                          setProfilePrompt(
+                            pid,
+                            (e.currentTarget as HTMLTextAreaElement).value,
+                          )
+                        }
+                      />
+                    </div>
+                  )}
+                </For>
+              </div>
+              <div class="ai-disclosure">
+                Images you send via "Ask AI" go directly to the selected
+                provider. They are subject to that provider's data-handling
+                policy. Lekhini does not log or proxy them.
+              </div>
+            </div>
+
             <div class="settings-section">
               <div class="settings-section-label">File save</div>
               <div class="settings-row">
@@ -947,6 +1263,21 @@ export function ToolbarApp() {
               </div>
             </div>
           </div>
+        </Show>
+
+        {/* ─── CHAT PANEL (AI integration) ──────────────────────────
+             Shares the dock slot with Settings + Status. Mutual
+             exclusion is enforced in hub.patch — opening this closes
+             the others. Settings still has render priority though,
+             so a user mid-chat who opens Settings sees Settings and
+             the chat is hidden until they close it. */}
+        <Show when={hub().chatOpen && !hub().settingsOpen && panelKind() === null}>
+          <ChatPanel
+            provider={hub().aiActiveProvider}
+            model={hub().aiActiveModel}
+            promptOverrides={hub().aiProfilePrompts}
+            onClose={closeChat}
+          />
         </Show>
 
         {/* ─── STATUS PANEL (permission / save error) ──────────────

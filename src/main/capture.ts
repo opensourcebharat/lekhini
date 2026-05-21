@@ -15,6 +15,8 @@ import { getOverlays } from './windows/overlay';
 import { notifyStatus, onFocusRecheck, screenStatus } from './permissions';
 import { persisted } from './persistence';
 import { patch as patchHub } from './hub';
+import { startChatSession } from './ai/ipc';
+import type { ProfileId } from '../shared/types';
 
 interface Rect {
   x: number;
@@ -119,6 +121,33 @@ export async function copyFocusedSnipToClipboard(): Promise<void> {
 
   const img = nativeImage.createFromBuffer(png);
   clipboard.writeImage(img);
+}
+
+// Start an AI chat about the user's current snip selection. Same
+// capture + composite path Save / Copy use; the bytes are handed to
+// startChatSession which broadcasts chat:session and opens the dock
+// chat panel.
+export async function askAiAboutFocusedSnip(profile: ProfileId): Promise<void> {
+  if (!gateScreenForCapture('clipboard')) return;
+  const displayId = getFocusedDisplayId();
+  const rect = snipSelections.get(displayId);
+  if (!rect) return;
+  const display = screen.getAllDisplays().find((d) => d.id === displayId);
+  if (!display) return;
+  const overlay = getOverlays().get(displayId);
+  if (!overlay || overlay.isDestroyed()) return;
+
+  // Hide the dashed selection so it isn't baked into the PNG sent
+  // to the AI (the existing crop rect is already in hand).
+  setSnipSelection(displayId, null);
+  await waitMs(60);
+
+  const png = await captureCroppedComposite(overlay, display, rect);
+  if (!png) {
+    handleCaptureFailure();
+    return;
+  }
+  startChatSession(png, 'image/png', profile);
 }
 
 export async function captureFocusedDisplay(): Promise<void> {
@@ -316,6 +345,9 @@ export function registerCaptureIpc() {
   });
   ipcMain.handle('snip:clear', (_evt, payload: { displayId: number }) => {
     setSnipSelection(payload.displayId, null);
+  });
+  ipcMain.handle('snip:ask-ai', async (_evt, payload: { profile: ProfileId }) => {
+    await askAiAboutFocusedSnip(payload.profile);
   });
   // Renderer-triggered folder picker, used by the "Change…" button in
   // Settings → File save. Returns the chosen path so the renderer can

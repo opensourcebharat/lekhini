@@ -2,9 +2,11 @@ import { contextBridge, ipcRenderer } from 'electron';
 import type {
   AiStatus,
   AskInput,
+  ChatSessionPayload,
   ConnectionTestResult,
   HubStateUpdate,
   IpcChannel,
+  ProfileId,
   ProviderId,
   StreamChunk,
 } from '../shared/types';
@@ -51,6 +53,8 @@ const api = {
     clear: (payload: { displayId: number }) =>
       ipcRenderer.invoke('snip:clear' satisfies IpcChannel, payload),
     copy: () => ipcRenderer.invoke('snip:copy' satisfies IpcChannel),
+    askAi: (profile: ProfileId) =>
+      ipcRenderer.invoke('snip:ask-ai' satisfies IpcChannel, { profile }),
   },
   relay: {
     undo: () => ipcRenderer.invoke('relay:undo' satisfies IpcChannel),
@@ -119,6 +123,16 @@ const api = {
       ipcRenderer.invoke('ai:cancel' satisfies IpcChannel, { requestId }),
     onChunk: (cb: (c: StreamChunk) => void) =>
       bind('ai:chunk', cb as (v: unknown) => void),
+  },
+  chat: {
+    // Called by SnipActions in the overlay to hand a snip off to the
+    // toolbar's ChatPanel. Main relays via chat:session.
+    start: (payload: { png: Uint8Array; mime: string; profile: ProfileId }) =>
+      ipcRenderer.invoke('chat:start' satisfies IpcChannel, payload) as Promise<{
+        sessionId: string;
+      }>,
+    onSession: (cb: (s: ChatSessionPayload) => void) =>
+      bind('chat:session', cb as (v: unknown) => void),
   },
   app: {
     info: () =>
