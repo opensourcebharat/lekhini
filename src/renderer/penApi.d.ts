@@ -1,4 +1,12 @@
-import type { HubStateUpdate, ScreenPermissionStatus } from '../shared/types';
+import type {
+  AiStatus,
+  AskInput,
+  ConnectionTestResult,
+  HubStateUpdate,
+  ProviderId,
+  ScreenPermissionStatus,
+  StreamChunk,
+} from '../shared/types';
 
 declare global {
   interface Window {
@@ -69,6 +77,18 @@ declare global {
       };
       shell: {
         openPath(p: string): Promise<void>;
+      };
+      ai: {
+        setKey(provider: ProviderId, key: string): Promise<void>;
+        deleteKey(provider: ProviderId): Promise<void>;
+        getStatus(): Promise<AiStatus[]>;
+        testConnection(
+          provider: ProviderId,
+          model: string,
+        ): Promise<ConnectionTestResult>;
+        ask(input: AskInput): Promise<{ requestId: string }>;
+        cancel(requestId: string): Promise<void>;
+        onChunk(cb: (c: StreamChunk) => void): () => void;
       };
       app: {
         info(): Promise<{ name: string; version: string; packaged: boolean }>;

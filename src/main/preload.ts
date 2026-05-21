@@ -1,5 +1,13 @@
 import { contextBridge, ipcRenderer } from 'electron';
-import type { HubStateUpdate, IpcChannel } from '../shared/types';
+import type {
+  AiStatus,
+  AskInput,
+  ConnectionTestResult,
+  HubStateUpdate,
+  IpcChannel,
+  ProviderId,
+  StreamChunk,
+} from '../shared/types';
 
 const api = {
   hub: {
@@ -90,6 +98,27 @@ const api = {
   shell: {
     openPath: (p: string) =>
       ipcRenderer.invoke('shell:open-path' satisfies IpcChannel, p),
+  },
+  ai: {
+    setKey: (provider: ProviderId, key: string) =>
+      ipcRenderer.invoke('ai:set-key' satisfies IpcChannel, { provider, key }),
+    deleteKey: (provider: ProviderId) =>
+      ipcRenderer.invoke('ai:delete-key' satisfies IpcChannel, { provider }),
+    getStatus: () =>
+      ipcRenderer.invoke('ai:get-status' satisfies IpcChannel) as Promise<AiStatus[]>,
+    testConnection: (provider: ProviderId, model: string) =>
+      ipcRenderer.invoke('ai:test-connection' satisfies IpcChannel, {
+        provider,
+        model,
+      }) as Promise<ConnectionTestResult>,
+    ask: (input: AskInput) =>
+      ipcRenderer.invoke('ai:ask' satisfies IpcChannel, input) as Promise<{
+        requestId: string;
+      }>,
+    cancel: (requestId: string) =>
+      ipcRenderer.invoke('ai:cancel' satisfies IpcChannel, { requestId }),
+    onChunk: (cb: (c: StreamChunk) => void) =>
+      bind('ai:chunk', cb as (v: unknown) => void),
   },
   app: {
     info: () =>

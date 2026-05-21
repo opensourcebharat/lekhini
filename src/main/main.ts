@@ -10,6 +10,7 @@ import {
 import { createToolbar, getToolbar, registerToolbarIpc, resizeToolbar } from './windows/toolbar';
 import { registerPermissionsIpc } from './permissions';
 import { registerCaptureIpc } from './capture';
+import { registerAiIpc } from './ai/ipc';
 import {
   registerDrawingHotkeys,
   registerEscapeWhileDrawing,
@@ -36,6 +37,7 @@ app.whenReady().then(async () => {
   registerPermissionsIpc();
   registerCaptureIpc();
   registerToolbarIpc();
+  registerAiIpc();
 
   for (const display of screen.getAllDisplays()) {
     console.log('[pen] creating overlay for display', display.id, display.bounds);
@@ -59,16 +61,18 @@ app.whenReady().then(async () => {
       registerEscapeWhileDrawing(state.drawMode);
       registerDrawingHotkeys(state.drawMode);
     }
-    // The status panel (permission / save error) occupies the same
-    // dock slot as Settings in the toolbar, so we treat either being
-    // open as "the side panel is showing" for window-resize purposes.
-    const sidePanelOpen = state.settingsOpen || state.statusPanelOpen;
+    // Three panels share the dock slot: settings, status (permission
+    // / save error), and AI chat. Any of them being open means the
+    // toolbar window should grow to fit a side panel.
+    const sidePanelOpen =
+      state.settingsOpen || state.statusPanelOpen || state.chatOpen;
     if (changed.has('orientation')) {
       resizeToolbar(state.orientation, state.minimized, sidePanelOpen, 'default');
     } else if (
       changed.has('minimized') ||
       changed.has('settingsOpen') ||
-      changed.has('statusPanelOpen')
+      changed.has('statusPanelOpen') ||
+      changed.has('chatOpen')
     ) {
       resizeToolbar(state.orientation, state.minimized, sidePanelOpen, 'keep');
     }

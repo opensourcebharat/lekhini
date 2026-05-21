@@ -8,6 +8,7 @@ import type {
   Orientation,
   PerToolWidth,
   ProfileId,
+  ProviderId,
   Theme,
   ToolId,
   ToolSettings,
@@ -34,6 +35,15 @@ export interface HubState {
   // in hub so main can grow the toolbar window to fit, the same way
   // it does for settingsOpen.
   statusPanelOpen: boolean;
+  // AI chat panel visibility — transient like statusPanelOpen.
+  // Mutually exclusive with settingsOpen + statusPanelOpen at the
+  // dock slot level.
+  chatOpen: boolean;
+  // Persisted AI configuration mirrored into the hub so renderers
+  // can subscribe via the existing hub.onBroadcast pipe.
+  aiActiveProvider: ProviderId | null;
+  aiActiveModel: string | null;
+  aiProfilePrompts: Partial<Record<ProfileId, string>>;
 }
 
 const state: HubState = {
@@ -52,6 +62,10 @@ const state: HubState = {
   saveDir: null,
   alwaysAskSavePath: false,
   statusPanelOpen: false,
+  chatOpen: false,
+  aiActiveProvider: null,
+  aiActiveModel: null,
+  aiProfilePrompts: {},
 };
 
 const subscribers = new Set<BrowserWindow>();
@@ -114,6 +128,16 @@ export function hydrateFromPersistence(): void {
   // older installs without this key fall through to the default.
   state.saveDir = typeof p.saveDir === 'string' ? p.saveDir : null;
   state.alwaysAskSavePath = typeof p.alwaysAskSavePath === 'boolean' ? p.alwaysAskSavePath : false;
+  // AI config — schema-tolerant: missing fields fall back to null /
+  // empty so old installs upgrade cleanly when they first launch the
+  // build with AI integration.
+  state.aiActiveProvider =
+    p.aiActiveProvider === 'anthropic' || p.aiActiveProvider === 'openai' || p.aiActiveProvider === 'gemini'
+      ? p.aiActiveProvider
+      : null;
+  state.aiActiveModel = typeof p.aiActiveModel === 'string' ? p.aiActiveModel : null;
+  state.aiProfilePrompts =
+    p.aiProfilePrompts && typeof p.aiProfilePrompts === 'object' ? p.aiProfilePrompts : {};
   // If the active tool is pencil, the canonical color is graphite —
   // don't restore a stray non-graphite value from a previous session.
   const colorForTool =
@@ -244,10 +268,21 @@ export function patch(update: HubStateUpdate) {
   if (update.settingsOpen !== undefined && update.settingsOpen !== state.settingsOpen) {
     state.settingsOpen = update.settingsOpen;
     changed.add('settingsOpen');
-    // Settings and flyout share the side panel slot; only one open at once.
-    if (state.settingsOpen && state.thicknessFlyoutOpen) {
-      state.thicknessFlyoutOpen = false;
-      changed.add('thicknessFlyoutOpen');
+    // The dock slot holds AT MOST ONE of: settings, status panel,
+    // chat panel, thickness flyout. Opening settings closes the rest.
+    if (state.settingsOpen) {
+      if (state.thicknessFlyoutOpen) {
+        state.thicknessFlyoutOpen = false;
+        changed.add('thicknessFlyoutOpen');
+      }
+      if (state.statusPanelOpen) {
+        state.statusPanelOpen = false;
+        changed.add('statusPanelOpen');
+      }
+      if (state.chatOpen) {
+        state.chatOpen = false;
+        changed.add('chatOpen');
+      }
     }
   }
   if (
@@ -280,13 +315,57 @@ export function patch(update: HubStateUpdate) {
   ) {
     state.statusPanelOpen = update.statusPanelOpen;
     changed.add('statusPanelOpen');
-    // Status panel and settings are mutually exclusive panels in the
-    // same dock slot — opening one closes the other so the renderer
-    // and main agree on what's showing.
-    if (state.statusPanelOpen && state.settingsOpen) {
-      state.settingsOpen = false;
-      changed.add('settingsOpen');
+    // Mutex with the other dock-slot panels.
+    if (state.statusPanelOpen) {
+      if (state.settingsOpen) {
+        state.settingsOpen = false;
+        changed.add('settingsOpen');
+      }
+      if (state.chatOpen) {
+        state.chatOpen = false;
+        changed.add('chatOpen');
+      }
     }
+  }
+  if (update.chatOpen !== undefined && update.chatOpen !== state.chatOpen) {
+    state.chatOpen = update.chatOpen;
+    changed.add('chatOpen');
+    // Mutex with the other dock-slot panels.
+    if (state.chatOpen) {
+      if (state.settingsOpen) {
+        state.settingsOpen = false;
+        changed.add('settingsOpen');
+      }
+      if (state.statusPanelOpen) {
+        state.statusPanelOpen = false;
+        changed.add('statusPanelOpen');
+      }
+    }
+  }
+  if (
+    update.aiActiveProvider !== undefined &&
+    update.aiActiveProvider !== state.aiActiveProvider
+  ) {
+    state.aiActiveProvider = update.aiActiveProvider;
+    changed.add('aiActiveProvider');
+    save('aiActiveProvider', state.aiActiveProvider);
+  }
+  if (update.aiActiveModel !== undefined && update.aiActiveModel !== state.aiActiveModel) {
+    state.aiActiveModel = update.aiActiveModel;
+    changed.add('aiActiveModel');
+    save('aiActiveModel', state.aiActiveModel);
+  }
+  if (update.aiProfilePrompts !== undefined) {
+    // Merge — caller can patch a single profile's override without
+    // wiping the others. Empty-string entry removes the override.
+    const merged = { ...state.aiProfilePrompts, ...update.aiProfilePrompts };
+    for (const key of Object.keys(merged) as ProfileId[]) {
+      const v = merged[key];
+      if (typeof v !== 'string' || v.length === 0) delete merged[key];
+    }
+    state.aiProfilePrompts = merged;
+    changed.add('aiProfilePrompts');
+    save('aiProfilePrompts', state.aiProfilePrompts);
   }
   broadcast(changed);
 }

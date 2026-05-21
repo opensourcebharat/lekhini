@@ -148,7 +148,53 @@ export type HubStateUpdate = {
   // main can resize the toolbar window to fit it, the same way it
   // does for settingsOpen.
   statusPanelOpen?: boolean;
+  // AI integration. chatOpen is transient (panel visibility);
+  // the others persist in PersistedState too.
+  chatOpen?: boolean;
+  aiActiveProvider?: ProviderId | null;
+  aiActiveModel?: string | null;
+  aiProfilePrompts?: Partial<Record<ProfileId, string>>;
 };
+
+// ── AI integration types ───────────────────────────────────────────
+
+export type ProviderId = 'anthropic' | 'openai' | 'gemini';
+
+export interface AiStatus {
+  provider: ProviderId;
+  configured: boolean;
+}
+
+export interface ChatTurn {
+  role: 'user' | 'assistant';
+  content: string;
+}
+
+export interface AskInput {
+  provider: ProviderId;
+  model: string;
+  systemPrompt: string;
+  // PNG attached to the FIRST user turn only. Renderer encodes the
+  // snip and sends bytes through IPC; main decodes and forwards to
+  // the provider in whatever shape it wants.
+  image?: { mime: string; base64: string };
+  history: ChatTurn[];
+  userMessage: string;
+}
+
+export interface StreamChunk {
+  requestId: string;
+  delta?: string;
+  done?: boolean;
+  error?: string;
+}
+
+export interface ConnectionTestResult {
+  ok: boolean;
+  message?: string;
+  // Round-trip duration in milliseconds, populated on ok=true.
+  latencyMs?: number;
+}
 
 export type IpcChannel =
   | 'hub:state:get'
@@ -186,7 +232,15 @@ export type IpcChannel =
   | 'permissions:deep-recheck'
   | 'app:relaunch'
   | 'settings:save-dir:pick'
-  | 'shell:open-path';
+  | 'shell:open-path'
+  // AI integration
+  | 'ai:set-key'
+  | 'ai:delete-key'
+  | 'ai:get-status'
+  | 'ai:test-connection'
+  | 'ai:ask'
+  | 'ai:cancel'
+  | 'ai:chunk';
 
 export interface CaptureSaved {
   path: string;
