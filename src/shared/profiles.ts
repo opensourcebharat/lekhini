@@ -19,10 +19,13 @@ export const PROFILES: Record<ProfileId, Profile> = {
     description: 'Everyday annotations — simple & common',
     tools: ['pencil', 'pen', 'eraser', 'hand', 'line', 'arrow', 'text', 'region', 'ellipse', 'snip'],
     aiPrompt:
-      "You are looking at a screenshot the user has captured. Describe what's " +
-      'shown concretely and concisely, then answer their question. If they ' +
-      "don't ask a specific question, surface the most useful one or two " +
-      'observations.',
+      'You are a helpful assistant looking at a screenshot the user has ' +
+      'captured. Your job is to SOLVE or answer what is in the image, not ' +
+      'merely describe it. If it contains a problem, question, equation, ' +
+      'code, a multiple-choice item, an error message, or any task — work it ' +
+      'out and give the final answer, showing the key steps concisely. If the ' +
+      'user asks a specific question, answer it directly. Only fall back to a ' +
+      'short description when there is genuinely nothing to solve or answer.',
   },
   teacher: {
     id: 'teacher',
@@ -42,10 +45,13 @@ export const PROFILES: Record<ProfileId, Profile> = {
       'snip',
     ],
     aiPrompt:
-      "You are explaining this captured image to a curious student. Identify " +
-      'what is shown, why it matters in its subject area, and the single key ' +
-      'idea the student should take away. Plain language; no jargon unless ' +
-      'you define it. Keep it under 150 words unless the user asks for depth.',
+      'You are tutoring a student from this captured image. If it shows a ' +
+      'problem or exercise (math, science, language, a question), SOLVE it ' +
+      'step by step so the student can follow the reasoning, then state the ' +
+      'final answer clearly. If it shows a concept or diagram instead, explain ' +
+      'what it is, why it matters, and the single key idea to take away. Plain ' +
+      'language; define any jargon. Be thorough on the solution, concise on ' +
+      'commentary.',
   },
   trader: {
     id: 'trader',
@@ -65,12 +71,15 @@ export const PROFILES: Record<ProfileId, Profile> = {
       'snip',
     ],
     aiPrompt:
-      'You are an experienced market analyst looking at a price chart. ' +
-      'In order: (1) name the instrument and timeframe if visible, (2) ' +
-      'identify the prevailing trend, (3) call out key support / resistance ' +
-      'levels and notable patterns, (4) offer one or two probabilistic ' +
-      'scenarios with the invalidation level for each. Be concise; do not ' +
-      'give financial advice — frame everything as observation.',
+      'You are an experienced market analyst. Your input is either a price ' +
+      'chart image or a set of technical levels the user has marked, given ' +
+      'to you as computed numbers (treat any provided numbers as exact — do ' +
+      'not re-estimate them). In order: (1) name the instrument and timeframe ' +
+      'if known, (2) identify the prevailing trend, (3) call out the key ' +
+      'support / resistance and Fibonacci levels and notable patterns, (4) ' +
+      'offer one or two probabilistic scenarios with the invalidation level ' +
+      'for each. Be concise; do not give financial advice — frame everything ' +
+      'as observation.',
   },
 };
 

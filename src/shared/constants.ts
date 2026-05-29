@@ -19,7 +19,39 @@ export const HIGHLIGHTER_DEFAULT: ToolSettings = {
 
 export const FIB_LEVELS = [0, 0.236, 0.382, 0.5, 0.618, 0.786, 1.0];
 
+// Per-level colors for the Fibonacci retracement, matching the
+// convention traders are used to on TradingView / MT charts: each
+// ratio reads as a distinct hue so levels are identifiable at a glance
+// without checking the label. 0 and 1 (the swing endpoints) are
+// neutral grey; the inner ratios run warm→cool, with the 0.618 golden
+// ratio in its signature teal. Keyed by the ratio's string form.
+export const FIB_COLORS: Record<string, string> = {
+  '0': '#9598a1', // swing low/high — neutral grey
+  '0.236': '#f23645', // red
+  '0.382': '#ff9800', // orange
+  '0.5': '#4caf50', // green
+  '0.618': '#089981', // golden ratio — teal (the key level)
+  '0.786': '#2962ff', // blue
+  '1': '#9598a1', // full retrace — neutral grey
+};
+
+// Color for a given Fibonacci level, falling back to neutral grey for
+// any custom level not in the standard palette.
+export function fibColor(level: number): string {
+  return FIB_COLORS[String(level)] ?? '#9598a1';
+}
+
 export const SNAP_ANGLES_DEG = [0, 15, 30, 45, 60, 75, 90, 105, 120, 135, 150, 165, 180];
+
+// Default first user message for the auto-fired opening turn of an
+// "Ask AI" snip session. The user hasn't typed anything yet — the image
+// carries the request — so this is phrased to make the model SOLVE or
+// answer whatever is in the image rather than merely describe it. Used
+// by every provider adapter when input.userMessage is empty.
+export const SOLVE_FIRST_TURN =
+  'Solve or answer whatever is shown in this image. If it contains a ' +
+  'problem, question, equation, or task, work it out and give the final ' +
+  'answer with the key steps — do not just describe what you see.';
 
 // Initial sizes for the toolbar window. The renderer reports its
 // actual content size after mount and the window resizes to fit — so

@@ -3,6 +3,18 @@ productName: Lekhini
 copyright: Copyright © 2026 Open Source Bharat — https://opensourcebharat.org
 asar: true
 
+# Auto-update feed + release target. electron-builder bakes this into
+# app-update.yml inside the build and, when run with --publish, uploads
+# the installers plus the latest*.yml manifests to GitHub Releases.
+# electron-updater reads the same feed at runtime to discover updates.
+publish:
+  provider: github
+  owner: opensourcebharat
+  repo: lekhini
+  # Upload to a DRAFT release; the release workflow flips it public only
+  # after every OS finishes, so users never see a half-uploaded release.
+  releaseType: draft
+
 # Single source-of-truth for the app icon. electron-builder auto-
 # generates the platform-specific .icns (macOS) and .ico (Windows)
 # from this PNG. Recommended: 1024×1024, transparent background.
@@ -17,10 +29,24 @@ files:
   - dist-electron
   - package.json
 
+# Bundled per-profile RAG seed examples ("intent files"), read at
+# runtime from process.resourcesPath/intent.
+extraResources:
+  - from: resources/intent
+    to: intent
+
 mac:
   category: public.app-category.productivity
   target:
     - target: dmg
+      arch:
+        - arm64
+        - x64
+    # zip is what Squirrel.Mac consumes for auto-update; ship it
+    # alongside the dmg so updates work once the build is signed +
+    # notarized. (Unsigned builds still produce it; macOS just won't
+    # auto-apply until signing is configured.)
+    - target: zip
       arch:
         - arm64
         - x64

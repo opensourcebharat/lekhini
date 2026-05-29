@@ -7,6 +7,36 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### AI (new)
+- **Ask AI on a snip** — capture a region and get it *solved/answered*
+  (math, code, questions, errors), not just described. A dockable chat
+  panel streams the response.
+- **Local-first routing** — on-device models via [Ollama](https://ollama.com)
+  with a first-run setup wizard; optional cloud providers as fallback.
+- **Providers**: Ollama (local), Anthropic Claude, OpenAI, Google Gemini,
+  DeepSeek (text), and Sarvam AI (Indic-strong Vision OCR → LLM solve).
+- **Autocorrect** for typed text and recognized handwriting (per-kind
+  toggles), **handwriting recognition** (drawn ink → text via a vision
+  model), and **trader chart analysis** from drawn levels.
+- **On-device learning (RAG)** — accepted corrections are remembered
+  locally to personalize suggestions; nothing leaves the machine.
+- **Per-profile** system prompts and model overrides in Settings → AI.
+- Follow-up questions retain full conversation context (image/OCR carried
+  across turns) until a new snip starts a fresh conversation.
+
+### Auto-update (new)
+- Background auto-update from GitHub Releases via `electron-updater`:
+  downloads in the background and applies on quit. Settings → Updates adds
+  an automatic-updates toggle, a manual check, and restart-to-update.
+  (macOS auto-update activates once the build is signed + notarized.)
+
+### Build & release (new)
+- Tag-driven release automation: `npm run release[:minor|:major]` bumps
+  the version, rolls the changelog, commits, tags, and pushes.
+- GitHub Actions builds macOS / Windows / Linux on a `v*` tag and
+  publishes installers + update manifests to GitHub Releases.
+- macOS builds now also emit a `.zip` (for Squirrel.Mac auto-update).
+
 ## [1.0.0] — 2026-05-20
 
 Initial open-source release of Lekhini, by

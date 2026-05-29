@@ -10,11 +10,19 @@ import type {
 import { Icons } from './icons';
 
 interface Props {
-  // Comes from hub.aiActiveProvider / aiActiveModel — null when the
-  // user hasn't configured any provider. The panel shows a friendly
-  // empty-state in that case rather than blowing up.
+  // Comes from hub.aiActiveProvider / aiActiveModel — the cloud
+  // fallback pair, null when no cloud provider is configured. Main's
+  // resolver may override this with a local model, so these are just a
+  // hint; routing is authoritative server-side.
   provider: ProviderId | null;
   model: string | null;
+  // True when ANY AI path is usable (local model installed OR a cloud
+  // provider configured). Drives the empty-state instead of provider.
+  aiReady: boolean;
+  // The active chat session, lifted to ToolbarApp (which is always
+  // mounted) so the very first snip isn't dropped. See the createEffect
+  // below for why this can't live as a subscription inside this panel.
+  session: ChatSessionPayload | null;
   promptOverrides: Partial<Record<ProfileId, string>>;
   onClose: () => void;
 }
@@ -40,18 +48,31 @@ export function ChatPanel(props: Props) {
   let scrollEl: HTMLDivElement | undefined;
   let composerEl: HTMLTextAreaElement | undefined;
 
-  // Subscribe to chat:session broadcasts from main. Each new session
-  // resets the panel — old conversation is dropped (we're ephemeral
-  // by design in v1; persistence comes later).
+  // React to the session prop. The subscription that produces it lives
+  // in ToolbarApp (always mounted) rather than here, because this panel
+  // only mounts once hub.chatOpen flips true — and main broadcasts
+  // chat:session at the same moment it sets chatOpen. A listener inside
+  // this panel's onMount would miss the FIRST session every time (the
+  // event fired before the panel existed), which is exactly the "first
+  // Ask AI opens an empty chat, second one works" bug. Reacting to the
+  // prop runs the opening turn whether the session lands before or after
+  // mount. Each new sessionId resets the panel — old conversation is
+  // dropped (ephemeral by design in v1; persistence comes later).
+  let lastSessionId: string | null = null;
+  createEffect(() => {
+    const s = props.session;
+    if (!s || s.sessionId === lastSessionId) return;
+    lastSessionId = s.sessionId;
+    setSession(s);
+    setTurns([]);
+    setActiveRequest(null);
+    // Kick off the first AI turn automatically. Image sessions fire
+    // with "" (the image + system prompt carry the request); text
+    // sessions fire with their precomputed initialText.
+    void runTurn(s.initialText ?? '', s);
+  });
+
   onMount(() => {
-    const off = window.pen.chat.onSession((s) => {
-      setSession(s);
-      setTurns([]);
-      setActiveRequest(null);
-      // Kick off the first AI turn automatically: image + system prompt
-      // do the work without the user typing anything.
-      void runTurn('', s);
-    });
     const offChunk = window.pen.ai.onChunk((c) => {
       if (c.requestId !== activeRequest()) return;
       setTurns((prev) => {
@@ -73,10 +94,7 @@ export function ChatPanel(props: Props) {
         queueMicrotask(focusComposer);
       }
     });
-    onCleanup(() => {
-      off();
-      offChunk();
-    });
+    onCleanup(offChunk);
   });
 
   // Auto-scroll to the bottom as the assistant streams.
@@ -99,46 +117,55 @@ export function ChatPanel(props: Props) {
   ): Promise<void> => {
     const s = forSession ?? session();
     if (!s) return;
-    if (!props.provider || !props.model) {
+    if (!props.aiReady) {
       setTurns((prev) => [
         ...prev,
         {
           role: 'assistant',
           content: '',
-          error: 'No AI provider configured. Open Settings → AI to set one up.',
+          error:
+            'No AI available. Enable Local AI and install a model, or add a cloud provider key in Settings → AI.',
         },
       ]);
       return;
     }
-    // Push user turn (if non-empty — first auto-fired turn is "").
-    setTurns((prev) =>
-      userMessage.length > 0
-        ? [...prev, { role: 'user', content: userMessage }]
-        : prev,
-    );
-    // Push an open assistant turn that the streamed chunks will fill.
-    setTurns((prev) => [...prev, { role: 'assistant', content: '', pending: true }]);
-
+    // Snapshot the conversation BEFORE adding this turn — that's the
+    // history we replay. Building it after the pushes would duplicate
+    // the current message (also sent separately as userMessage).
     const history: ChatTurn[] = turns()
       .filter((t) => !t.pending && !t.error)
       .map((t) => ({ role: t.role, content: t.content }));
-    // First turn — image will be attached by main; remove the empty
-    // user turn from history since the adapter wraps it itself.
+    // First turn = no prior user turn. The image attaches here; main
+    // caches it and re-injects it on follow-ups so context is retained.
     const isFirstTurn = !history.some((h) => h.role === 'user');
 
+    // Record the user turn — INCLUDING the auto-fired opening turn whose
+    // text is empty (the image carries the request). Storing it keeps the
+    // original ask in the replayed history so follow-ups don't go amnesiac.
+    setTurns((prev) => [...prev, { role: 'user', content: userMessage }]);
+    // Push an open assistant turn that the streamed chunks will fill.
+    setTurns((prev) => [...prev, { role: 'assistant', content: '', pending: true }]);
+
     const systemPrompt = resolveAiPrompt(s.profile, props.promptOverrides);
-    const image = isFirstTurn
-      ? { mime: s.mime, base64: uint8ToBase64(s.png) }
-      : undefined;
+    const image =
+      isFirstTurn && s.png
+        ? { mime: s.mime ?? 'image/png', base64: uint8ToBase64(s.png) }
+        : undefined;
 
     try {
       const { requestId } = await window.pen.ai.ask({
-        provider: props.provider,
-        model: props.model,
+        // Hints only — main's resolver picks local-vs-cloud and the
+        // concrete model. Default to local when no cloud pair is set.
+        provider: props.provider ?? 'ollama',
+        model: props.model ?? '',
         systemPrompt,
         image,
-        history: isFirstTurn ? [] : history,
+        history,
         userMessage,
+        profile: s.profile,
+        // Scopes the conversation so main caches the snip (and Sarvam its
+        // OCR) per chat, until a new snip starts a fresh session.
+        sessionId: s.sessionId,
       });
       setActiveRequest(requestId);
     } catch (err) {
@@ -189,8 +216,8 @@ export function ChatPanel(props: Props) {
   // an object URL so we don't have to base64-encode for an <img>.
   const imageObjectUrl = (): string | null => {
     const s = session();
-    if (!s) return null;
-    const blob = new Blob([s.png as BlobPart], { type: s.mime });
+    if (!s || !s.png) return null;
+    const blob = new Blob([s.png as BlobPart], { type: s.mime ?? 'image/png' });
     return URL.createObjectURL(blob);
   };
 
@@ -204,7 +231,11 @@ export function ChatPanel(props: Props) {
       <div class="settings-header">
         <div class="chat-header-meta">
           <span class="settings-title">Ask AI</span>
-          <Show when={props.provider && props.model}>
+          <Show when={props.provider && props.model} fallback={
+            <Show when={props.aiReady}>
+              <span class="chat-provider-badge">Local</span>
+            </Show>
+          }>
             <span class="chat-provider-badge">
               {props.provider} · {props.model}
             </span>
@@ -217,12 +248,12 @@ export function ChatPanel(props: Props) {
         >{Icons.close()}</button>
       </div>
 
-      <Show when={session()}>
-        {(s) => (
+      <Show when={session() && session()!.png}>
+        {(_present) => (
           <div class="chat-thumb-wrap">
             <img class="chat-thumb" src={imageObjectUrl() ?? ''} alt="Snip" />
             <span class="chat-thumb-meta">{profileLabel()}</span>
-            <span class="chat-thumb-sessionid" title={s().sessionId} />
+            <span class="chat-thumb-sessionid" title={session()!.sessionId} />
           </div>
         )}
       </Show>
@@ -234,7 +265,10 @@ export function ChatPanel(props: Props) {
       </Show>
 
       <div class="chat-messages scroll-area" ref={scrollEl}>
-        <For each={turns()}>
+        {/* Hide the auto-fired opening user turn (empty text — the snip
+            thumbnail above already represents it); it exists only to
+            anchor the replayed history. */}
+        <For each={turns().filter((t) => t.role !== 'user' || t.content.length > 0)}>
           {(turn) => (
             <div class={`chat-bubble chat-bubble-${turn.role}`}>
               <Show when={turn.role === 'assistant' && turn.pending && turn.content.length === 0}>

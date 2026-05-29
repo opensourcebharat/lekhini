@@ -1,4 +1,4 @@
-import type { Item, ToolSettings } from '../../../shared/types';
+import type { Item, ProfileId, ToolSettings } from '../../../shared/types';
 import type { PointerSample } from '../canvas/pointerPipeline';
 
 export interface ToolContext {
@@ -16,6 +16,10 @@ export interface ToolContext {
   releaseFocus(): Promise<void>;
   promptText(at: { x: number; y: number }, onCommit: (text: string) => void): void;
   drawMode(): boolean;
+  // Active profile + text-styling/AI settings, read live by tools.
+  profile(): ProfileId;
+  defaultFont(): string;
+  autocorrectTyped(): boolean;
 }
 
 export interface Tool {

@@ -21,7 +21,22 @@ export default defineConfig({
           build: {
             outDir: 'dist-electron/main',
             rollupOptions: {
-              external: ['electron', 'electron-store', 'active-win'],
+              // bufferutil / utf-8-validate are OPTIONAL native addons of
+              // `ws` (pulled in transitively by the sarvamai SDK). They
+              // aren't installed; `ws` already wraps their require() in a
+              // try/catch and falls back to pure JS. Marking them external
+              // keeps them as runtime requires instead of letting Rollup
+              // emit a hard-failing resolve stub.
+              external: [
+                'electron',
+                'electron-store',
+                'active-win',
+                // Loaded from node_modules at runtime (shipped in app
+                // dependencies); bundling it pulls in dynamic requires.
+                'electron-updater',
+                'bufferutil',
+                'utf-8-validate',
+              ],
             },
           },
         },

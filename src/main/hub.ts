@@ -3,6 +3,7 @@ import { DEFAULT_SETTINGS, GRAPHITE_COLOR } from '../shared/constants';
 import { DEFAULT_PROFILE } from '../shared/profiles';
 import { persisted, PERSISTED_DEFAULTS, save } from './persistence';
 import type {
+  AiProfileModels,
   Calibration,
   HubStateUpdate,
   Orientation,
@@ -44,6 +45,17 @@ export interface HubState {
   aiActiveProvider: ProviderId | null;
   aiActiveModel: string | null;
   aiProfilePrompts: Partial<Record<ProfileId, string>>;
+  // Local-first (Ollama) AI configuration, mirrored from persistence.
+  aiLocalEnabled: boolean;
+  aiInstalledModels: string[];
+  aiLocalModel: string | null;
+  aiLocalVisionModel: string | null;
+  aiProfileModels: AiProfileModels;
+  autocorrectTyped: boolean;
+  autocorrectDrawn: boolean;
+  defaultTextFont: string;
+  aiOnboarded: boolean;
+  autoUpdate: boolean;
 }
 
 const state: HubState = {
@@ -66,6 +78,16 @@ const state: HubState = {
   aiActiveProvider: null,
   aiActiveModel: null,
   aiProfilePrompts: {},
+  aiLocalEnabled: false,
+  aiInstalledModels: [],
+  aiLocalModel: null,
+  aiLocalVisionModel: null,
+  aiProfileModels: {},
+  autocorrectTyped: false,
+  autocorrectDrawn: false,
+  defaultTextFont: 'system-ui, -apple-system, sans-serif',
+  aiOnboarded: false,
+  autoUpdate: true,
 };
 
 const subscribers = new Set<BrowserWindow>();
@@ -132,12 +154,35 @@ export function hydrateFromPersistence(): void {
   // empty so old installs upgrade cleanly when they first launch the
   // build with AI integration.
   state.aiActiveProvider =
-    p.aiActiveProvider === 'anthropic' || p.aiActiveProvider === 'openai' || p.aiActiveProvider === 'gemini'
+    p.aiActiveProvider === 'anthropic' ||
+    p.aiActiveProvider === 'openai' ||
+    p.aiActiveProvider === 'gemini' ||
+    p.aiActiveProvider === 'deepseek' ||
+    p.aiActiveProvider === 'sarvam' ||
+    p.aiActiveProvider === 'ollama'
       ? p.aiActiveProvider
       : null;
   state.aiActiveModel = typeof p.aiActiveModel === 'string' ? p.aiActiveModel : null;
   state.aiProfilePrompts =
     p.aiProfilePrompts && typeof p.aiProfilePrompts === 'object' ? p.aiProfilePrompts : {};
+  // Local AI — schema-tolerant for installs that predate it.
+  state.aiLocalEnabled = typeof p.aiLocalEnabled === 'boolean' ? p.aiLocalEnabled : false;
+  state.aiInstalledModels = Array.isArray(p.aiInstalledModels)
+    ? p.aiInstalledModels.filter((m): m is string => typeof m === 'string')
+    : [];
+  state.aiLocalModel = typeof p.aiLocalModel === 'string' ? p.aiLocalModel : null;
+  state.aiLocalVisionModel = typeof p.aiLocalVisionModel === 'string' ? p.aiLocalVisionModel : null;
+  state.aiProfileModels =
+    p.aiProfileModels && typeof p.aiProfileModels === 'object' ? p.aiProfileModels : {};
+  state.autocorrectTyped = typeof p.autocorrectTyped === 'boolean' ? p.autocorrectTyped : false;
+  state.autocorrectDrawn = typeof p.autocorrectDrawn === 'boolean' ? p.autocorrectDrawn : false;
+  state.defaultTextFont =
+    typeof p.defaultTextFont === 'string' && p.defaultTextFont.length > 0
+      ? p.defaultTextFont
+      : PERSISTED_DEFAULTS.defaultTextFont;
+  state.aiOnboarded = typeof p.aiOnboarded === 'boolean' ? p.aiOnboarded : false;
+  // Default ON when absent (older installs predate auto-update).
+  state.autoUpdate = typeof p.autoUpdate === 'boolean' ? p.autoUpdate : true;
   // If the active tool is pencil, the canonical color is graphite —
   // don't restore a stray non-graphite value from a previous session.
   const colorForTool =
@@ -366,6 +411,77 @@ export function patch(update: HubStateUpdate) {
     state.aiProfilePrompts = merged;
     changed.add('aiProfilePrompts');
     save('aiProfilePrompts', state.aiProfilePrompts);
+  }
+  if (update.aiLocalEnabled !== undefined && update.aiLocalEnabled !== state.aiLocalEnabled) {
+    state.aiLocalEnabled = update.aiLocalEnabled;
+    changed.add('aiLocalEnabled');
+    save('aiLocalEnabled', state.aiLocalEnabled);
+  }
+  if (update.aiInstalledModels !== undefined) {
+    state.aiInstalledModels = update.aiInstalledModels.filter(
+      (m): m is string => typeof m === 'string',
+    );
+    changed.add('aiInstalledModels');
+    save('aiInstalledModels', state.aiInstalledModels);
+  }
+  if (update.aiLocalModel !== undefined && update.aiLocalModel !== state.aiLocalModel) {
+    state.aiLocalModel = update.aiLocalModel;
+    changed.add('aiLocalModel');
+    save('aiLocalModel', state.aiLocalModel);
+  }
+  if (
+    update.aiLocalVisionModel !== undefined &&
+    update.aiLocalVisionModel !== state.aiLocalVisionModel
+  ) {
+    state.aiLocalVisionModel = update.aiLocalVisionModel;
+    changed.add('aiLocalVisionModel');
+    save('aiLocalVisionModel', state.aiLocalVisionModel);
+  }
+  if (update.aiProfileModels !== undefined) {
+    // Deep-merge per profile so a single profile's text/vision pick can
+    // be patched without wiping the rest. An empty string clears that
+    // slot back to the catalogue default.
+    const merged: AiProfileModels = { ...state.aiProfileModels };
+    for (const key of Object.keys(update.aiProfileModels) as ProfileId[]) {
+      const incoming = update.aiProfileModels[key] ?? {};
+      const slot = { ...merged[key], ...incoming };
+      if (slot.text === '') delete slot.text;
+      if (slot.vision === '') delete slot.vision;
+      if (slot.text === undefined && slot.vision === undefined) delete merged[key];
+      else merged[key] = slot;
+    }
+    state.aiProfileModels = merged;
+    changed.add('aiProfileModels');
+    save('aiProfileModels', state.aiProfileModels);
+  }
+  if (update.autocorrectTyped !== undefined && update.autocorrectTyped !== state.autocorrectTyped) {
+    state.autocorrectTyped = update.autocorrectTyped;
+    changed.add('autocorrectTyped');
+    save('autocorrectTyped', state.autocorrectTyped);
+  }
+  if (update.autocorrectDrawn !== undefined && update.autocorrectDrawn !== state.autocorrectDrawn) {
+    state.autocorrectDrawn = update.autocorrectDrawn;
+    changed.add('autocorrectDrawn');
+    save('autocorrectDrawn', state.autocorrectDrawn);
+  }
+  if (
+    update.defaultTextFont !== undefined &&
+    update.defaultTextFont !== state.defaultTextFont &&
+    update.defaultTextFont.length > 0
+  ) {
+    state.defaultTextFont = update.defaultTextFont;
+    changed.add('defaultTextFont');
+    save('defaultTextFont', state.defaultTextFont);
+  }
+  if (update.aiOnboarded !== undefined && update.aiOnboarded !== state.aiOnboarded) {
+    state.aiOnboarded = update.aiOnboarded;
+    changed.add('aiOnboarded');
+    save('aiOnboarded', state.aiOnboarded);
+  }
+  if (update.autoUpdate !== undefined && update.autoUpdate !== state.autoUpdate) {
+    state.autoUpdate = update.autoUpdate;
+    changed.add('autoUpdate');
+    save('autoUpdate', state.autoUpdate);
   }
   broadcast(changed);
 }

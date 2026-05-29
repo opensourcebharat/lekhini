@@ -4,10 +4,14 @@ import type {
   ChatSessionPayload,
   ConnectionTestResult,
   HubStateUpdate,
+  LocalModelInfo,
+  OllamaPullProgress,
+  OllamaServiceStatus,
   ProfileId,
   ProviderId,
   ScreenPermissionStatus,
   StreamChunk,
+  UpdateStatus,
 } from '../shared/types';
 
 declare global {
@@ -22,6 +26,7 @@ declare global {
         onUndo(cb: () => void): () => void;
         onRedo(cb: () => void): () => void;
         onClear(cb: () => void): () => void;
+        onAnalyze(cb: () => void): () => void;
         onScreenshot(cb: (payload: { png: Uint8Array }) => void): () => void;
         onSnip(
           cb: (payload: {
@@ -51,6 +56,7 @@ declare global {
         undo(): Promise<void>;
         redo(): Promise<void>;
         clear(): Promise<void>;
+        analyze(): Promise<void>;
         screenshot(): Promise<void>;
       };
       win: {
@@ -92,6 +98,36 @@ declare global {
         ask(input: AskInput): Promise<{ requestId: string }>;
         cancel(requestId: string): Promise<void>;
         onChunk(cb: (c: StreamChunk) => void): () => void;
+        recognize(payload: {
+          png: Uint8Array;
+          mime?: string;
+          profile?: ProfileId;
+        }): Promise<{ text: string; error?: string }>;
+        autocorrect(payload: {
+          text: string;
+          profile?: ProfileId;
+        }): Promise<{ text: string; error?: string }>;
+      };
+      ollama: {
+        status(): Promise<OllamaServiceStatus>;
+        start(): Promise<OllamaServiceStatus>;
+        listModels(): Promise<LocalModelInfo[]>;
+        diskSpace(): Promise<number>;
+        pull(model: string): Promise<{ ok: boolean }>;
+        cancelPull(model: string): Promise<void>;
+        deleteModel(model: string): Promise<void>;
+        installHelp(): Promise<void>;
+        onPullProgress(cb: (p: OllamaPullProgress) => void): () => void;
+      };
+      rag: {
+        stats(): Promise<Record<ProfileId, number>>;
+        resetProfile(profile: ProfileId): Promise<void>;
+        capture(payload: {
+          profile: ProfileId;
+          kind: 'typed' | 'drawn' | 'analysis' | 'chat';
+          original: string;
+          corrected: string;
+        }): Promise<void>;
       };
       chat: {
         start(payload: {
@@ -99,11 +135,19 @@ declare global {
           mime: string;
           profile: ProfileId;
         }): Promise<{ sessionId: string }>;
+        startText(payload: { text: string; profile: ProfileId }): Promise<{ sessionId: string }>;
         onSession(cb: (s: ChatSessionPayload) => void): () => void;
       };
       app: {
         info(): Promise<{ name: string; version: string; packaged: boolean }>;
         relaunch(): Promise<void>;
+      };
+      updater: {
+        get(): Promise<UpdateStatus>;
+        check(): Promise<UpdateStatus>;
+        install(): Promise<void>;
+        openReleases(): Promise<void>;
+        onStatus(cb: (s: UpdateStatus) => void): () => void;
       };
       env: {
         displayId(): number;

@@ -1,6 +1,7 @@
 import OpenAI from 'openai';
 import type { AskInput } from '../../shared/types';
 import type { ProviderAdapter } from './types';
+import { assembleTurns } from './messages';
 
 // OpenAI's chat.completions API takes vision via `image_url` content
 // parts on user messages. The URL can be a data: URL so we don't need
@@ -20,32 +21,24 @@ type OpenAIMessage =
 
 function buildMessages(input: AskInput): OpenAIMessage[] {
   const out: OpenAIMessage[] = [{ role: 'system', content: input.systemPrompt }];
-  for (const turn of input.history) {
-    out.push({ role: turn.role, content: turn.content });
-  }
-  const hasPriorUser = input.history.some((t) => t.role === 'user');
-  if (input.image && !hasPriorUser) {
-    out.push({
-      role: 'user',
-      content: [
-        {
-          type: 'image_url',
-          image_url: {
-            url: `data:${input.image.mime};base64,${input.image.base64}`,
+  // Image attaches to the FIRST user turn so follow-ups keep it in view.
+  const { turns, firstUserIdx } = assembleTurns(input);
+  turns.forEach((t, i) => {
+    if (input.image && i === firstUserIdx) {
+      out.push({
+        role: 'user',
+        content: [
+          {
+            type: 'image_url',
+            image_url: { url: `data:${input.image.mime};base64,${input.image.base64}` },
           },
-        },
-        {
-          type: 'text',
-          text:
-            input.userMessage.length > 0
-              ? input.userMessage
-              : 'Please analyse the attached image as instructed.',
-        },
-      ],
-    });
-  } else {
-    out.push({ role: 'user', content: input.userMessage });
-  }
+          { type: 'text', text: t.content },
+        ],
+      });
+    } else {
+      out.push({ role: t.role, content: t.content });
+    }
+  });
   return out;
 }
 

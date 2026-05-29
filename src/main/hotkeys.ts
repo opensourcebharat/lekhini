@@ -23,6 +23,7 @@ export function registerHotkeys() {
   ipcMain.handle('relay:undo', () => sendToFocusedOverlay('overlay:undo'));
   ipcMain.handle('relay:redo', () => sendToFocusedOverlay('overlay:redo'));
   ipcMain.handle('relay:clear', () => sendToAllOverlays('overlay:clear'));
+  ipcMain.handle('relay:analyze', () => sendToFocusedOverlay('overlay:analyze'));
   ipcMain.handle('capture:trigger', () => captureFocusedDisplay());
   ipcMain.handle('snip:copy', () => copyFocusedSnipToClipboard());
 }

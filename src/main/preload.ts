@@ -6,9 +6,13 @@ import type {
   ConnectionTestResult,
   HubStateUpdate,
   IpcChannel,
+  LocalModelInfo,
+  OllamaPullProgress,
+  OllamaServiceStatus,
   ProfileId,
   ProviderId,
   StreamChunk,
+  UpdateStatus,
 } from '../shared/types';
 
 const api = {
@@ -26,6 +30,7 @@ const api = {
     onUndo: (cb: () => void) => bind('overlay:undo', cb),
     onRedo: (cb: () => void) => bind('overlay:redo', cb),
     onClear: (cb: () => void) => bind('overlay:clear', cb),
+    onAnalyze: (cb: () => void) => bind('overlay:analyze', cb),
     onScreenshot: (cb: (payload: { png: Uint8Array }) => void) =>
       bind('overlay:screenshot', cb as (v: unknown) => void),
     onSnip: (
@@ -60,6 +65,7 @@ const api = {
     undo: () => ipcRenderer.invoke('relay:undo' satisfies IpcChannel),
     redo: () => ipcRenderer.invoke('relay:redo' satisfies IpcChannel),
     clear: () => ipcRenderer.invoke('relay:clear' satisfies IpcChannel),
+    analyze: () => ipcRenderer.invoke('relay:analyze' satisfies IpcChannel),
     screenshot: () => ipcRenderer.invoke('capture:trigger' satisfies IpcChannel),
   },
   win: {
@@ -123,12 +129,61 @@ const api = {
       ipcRenderer.invoke('ai:cancel' satisfies IpcChannel, { requestId }),
     onChunk: (cb: (c: StreamChunk) => void) =>
       bind('ai:chunk', cb as (v: unknown) => void),
+    // One-shot correction calls (non-streaming).
+    recognize: (payload: { png: Uint8Array; mime?: string; profile?: ProfileId }) =>
+      ipcRenderer.invoke('ai:recognize' satisfies IpcChannel, payload) as Promise<{
+        text: string;
+        error?: string;
+      }>,
+    autocorrect: (payload: { text: string; profile?: ProfileId }) =>
+      ipcRenderer.invoke('ai:autocorrect' satisfies IpcChannel, payload) as Promise<{
+        text: string;
+        error?: string;
+      }>,
+  },
+  ollama: {
+    status: () =>
+      ipcRenderer.invoke('ollama:status' satisfies IpcChannel) as Promise<OllamaServiceStatus>,
+    start: () =>
+      ipcRenderer.invoke('ollama:start' satisfies IpcChannel) as Promise<OllamaServiceStatus>,
+    listModels: () =>
+      ipcRenderer.invoke('ollama:list-models' satisfies IpcChannel) as Promise<LocalModelInfo[]>,
+    diskSpace: () =>
+      ipcRenderer.invoke('ollama:disk-space' satisfies IpcChannel) as Promise<number>,
+    pull: (model: string) =>
+      ipcRenderer.invoke('ollama:pull' satisfies IpcChannel, { model }) as Promise<{ ok: boolean }>,
+    cancelPull: (model: string) =>
+      ipcRenderer.invoke('ollama:cancel-pull' satisfies IpcChannel, { model }) as Promise<void>,
+    deleteModel: (model: string) =>
+      ipcRenderer.invoke('ollama:delete-model' satisfies IpcChannel, { model }) as Promise<void>,
+    installHelp: () =>
+      ipcRenderer.invoke('ollama:install-help' satisfies IpcChannel) as Promise<void>,
+    onPullProgress: (cb: (p: OllamaPullProgress) => void) =>
+      bind('ollama:pull-progress', cb as (v: unknown) => void),
+  },
+  rag: {
+    stats: () =>
+      ipcRenderer.invoke('rag:stats' satisfies IpcChannel) as Promise<
+        Record<ProfileId, number>
+      >,
+    resetProfile: (profile: ProfileId) =>
+      ipcRenderer.invoke('rag:reset-profile' satisfies IpcChannel, { profile }) as Promise<void>,
+    capture: (payload: {
+      profile: ProfileId;
+      kind: 'typed' | 'drawn' | 'analysis' | 'chat';
+      original: string;
+      corrected: string;
+    }) => ipcRenderer.invoke('rag:capture' satisfies IpcChannel, payload) as Promise<void>,
   },
   chat: {
     // Called by SnipActions in the overlay to hand a snip off to the
     // toolbar's ChatPanel. Main relays via chat:session.
     start: (payload: { png: Uint8Array; mime: string; profile: ProfileId }) =>
       ipcRenderer.invoke('chat:start' satisfies IpcChannel, payload) as Promise<{
+        sessionId: string;
+      }>,
+    startText: (payload: { text: string; profile: ProfileId }) =>
+      ipcRenderer.invoke('chat:start-text' satisfies IpcChannel, payload) as Promise<{
         sessionId: string;
       }>,
     onSession: (cb: (s: ChatSessionPayload) => void) =>
@@ -141,6 +196,15 @@ const api = {
         version: string;
       }>,
     relaunch: () => ipcRenderer.invoke('app:relaunch' satisfies IpcChannel),
+  },
+  updater: {
+    get: () => ipcRenderer.invoke('updater:get' satisfies IpcChannel) as Promise<UpdateStatus>,
+    check: () => ipcRenderer.invoke('updater:check' satisfies IpcChannel) as Promise<UpdateStatus>,
+    install: () => ipcRenderer.invoke('updater:install' satisfies IpcChannel) as Promise<void>,
+    openReleases: () =>
+      ipcRenderer.invoke('updater:open-releases' satisfies IpcChannel) as Promise<void>,
+    onStatus: (cb: (s: UpdateStatus) => void) =>
+      bind('updater:status', cb as (v: unknown) => void),
   },
   env: {
     displayId: () => ipcRenderer.sendSync('overlay:display-id'),

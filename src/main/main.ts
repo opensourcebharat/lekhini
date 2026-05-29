@@ -11,6 +11,9 @@ import { createToolbar, getToolbar, registerToolbarIpc, resizeToolbar } from './
 import { registerPermissionsIpc } from './permissions';
 import { registerCaptureIpc } from './capture';
 import { registerAiIpc } from './ai/ipc';
+import { registerRagIpc } from './ai/ragIpc';
+import { shutdown as shutdownOllama } from './ai/ollamaService';
+import { initAutoUpdates, registerUpdaterIpc } from './updater';
 import {
   registerDrawingHotkeys,
   registerEscapeWhileDrawing,
@@ -38,6 +41,8 @@ app.whenReady().then(async () => {
   registerCaptureIpc();
   registerToolbarIpc();
   registerAiIpc();
+  registerRagIpc();
+  registerUpdaterIpc();
 
   for (const display of screen.getAllDisplays()) {
     console.log('[pen] creating overlay for display', display.id, display.bounds);
@@ -51,6 +56,10 @@ app.whenReady().then(async () => {
   screen.on('display-metrics-changed', syncOverlaysToDisplays);
 
   registerHotkeys();
+
+  // Kick off background update checks once windows exist to receive the
+  // 'updater:status' broadcasts. No-op (→ 'unsupported') in dev / unsigned.
+  initAutoUpdates();
 
   onChange((state, changed) => {
     if (changed.has('drawMode')) {
@@ -83,6 +92,8 @@ app.whenReady().then(async () => {
 
 app.on('will-quit', () => {
   unregisterHotkeys();
+  // Stop only an Ollama daemon we spawned; abort any in-flight pulls.
+  shutdownOllama();
 });
 
 app.on('window-all-closed', () => {

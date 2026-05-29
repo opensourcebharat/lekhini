@@ -1,6 +1,7 @@
 import Anthropic from '@anthropic-ai/sdk';
 import type { AskInput } from '../../shared/types';
 import type { ProviderAdapter } from './types';
+import { assembleTurns } from './messages';
 
 // The Anthropic SDK's MessageParam type is stricter than what's
 // useful at our boundary (media_type is a literal union; content is
@@ -20,38 +21,28 @@ function normaliseMime(mime: string): 'image/png' | 'image/jpeg' | 'image/gif' |
 }
 
 function buildMessages(input: AskInput): Anthropic.MessageParam[] {
-  const out: Anthropic.MessageParam[] = [];
-  // Prior turns go in verbatim. Prior user turns were text-only —
-  // only the initial user turn carries the image.
-  for (const turn of input.history) {
-    out.push({ role: turn.role, content: turn.content });
-  }
-  const hasPriorUser = input.history.some((t) => t.role === 'user');
-  if (input.image && !hasPriorUser) {
-    out.push({
-      role: 'user',
-      content: [
-        {
-          type: 'image',
-          source: {
-            type: 'base64',
-            media_type: normaliseMime(input.image.mime),
-            data: input.image.base64,
+  // The image rides the FIRST user turn so it stays in context across
+  // follow-ups; all other turns are plain text.
+  const { turns, firstUserIdx } = assembleTurns(input);
+  return turns.map((t, i): Anthropic.MessageParam => {
+    if (input.image && i === firstUserIdx) {
+      return {
+        role: 'user',
+        content: [
+          {
+            type: 'image',
+            source: {
+              type: 'base64',
+              media_type: normaliseMime(input.image.mime),
+              data: input.image.base64,
+            },
           },
-        },
-        {
-          type: 'text',
-          text:
-            input.userMessage.length > 0
-              ? input.userMessage
-              : 'Please analyse the attached image as instructed.',
-        },
-      ],
-    });
-  } else {
-    out.push({ role: 'user', content: input.userMessage });
-  }
-  return out;
+          { type: 'text', text: t.content },
+        ],
+      };
+    }
+    return { role: t.role, content: t.content };
+  });
 }
 
 export const anthropic: ProviderAdapter = {

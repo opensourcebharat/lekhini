@@ -1,6 +1,7 @@
 import { GoogleGenerativeAI } from '@google/generative-ai';
 import type { AskInput } from '../../shared/types';
 import type { ProviderAdapter } from './types';
+import { assembleTurns } from './messages';
 
 // Gemini's generateContentStream API takes content parts as either
 // text or inlineData (base64 with mimeType). The streaming response
@@ -17,25 +18,16 @@ function roleFor(role: 'user' | 'assistant'): 'user' | 'model' {
 }
 
 function buildContents(input: AskInput): GeminiContent[] {
-  const out: GeminiContent[] = [];
-  for (const turn of input.history) {
-    out.push({ role: roleFor(turn.role), parts: [{ text: turn.content }] });
-  }
-  const hasPriorUser = input.history.some((t) => t.role === 'user');
-  const userParts: GeminiPart[] = [];
-  if (input.image && !hasPriorUser) {
-    userParts.push({
-      inlineData: { data: input.image.base64, mimeType: input.image.mime },
-    });
-  }
-  userParts.push({
-    text:
-      input.userMessage.length > 0
-        ? input.userMessage
-        : 'Please analyse the attached image as instructed.',
+  // Image attaches to the FIRST user turn so follow-ups keep it in view.
+  const { turns, firstUserIdx } = assembleTurns(input);
+  return turns.map((t, i): GeminiContent => {
+    const parts: GeminiPart[] = [];
+    if (input.image && i === firstUserIdx) {
+      parts.push({ inlineData: { data: input.image.base64, mimeType: input.image.mime } });
+    }
+    parts.push({ text: t.content });
+    return { role: roleFor(t.role), parts };
   });
-  out.push({ role: 'user', parts: userParts });
-  return out;
 }
 
 export const gemini: ProviderAdapter = {
