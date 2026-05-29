@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.1.0] — 2026-05-29
+
 ### AI (new)
 - **Ask AI on a snip** — capture a region and get it *solved/answered*
   (math, code, questions, errors), not just described. A dockable chat
@@ -80,5 +82,6 @@ Made in India.
 - macOS (signed/notarized .dmg via electron-builder).
 - Windows and Linux build targets are wired but unsigned.
 
-[Unreleased]: https://github.com/opensourcebharat/lekhini/compare/v1.0.0...HEAD
+[Unreleased]: https://github.com/opensourcebharat/lekhini/compare/v1.1.0...HEAD
+[1.1.0]: https://github.com/opensourcebharat/lekhini/compare/v1.0.0...v1.1.0
 [1.0.0]: https://github.com/opensourcebharat/lekhini/releases/tag/v1.0.0
