@@ -23,6 +23,10 @@ jobs:
       fail-fast: false
       matrix:
         os: [macos-latest, windows-latest, ubuntu-latest]
+    env:
+      # 'true' only when macOS signing secrets are configured — drives
+      # whether we sign + notarize or produce a clean unsigned build.
+      MAC_SIGN: ${{ secrets.CSC_LINK != '' }}
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -45,20 +49,29 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
+      # Only when the signing secrets exist: export them so electron-builder
+      # signs + notarizes. Skipped otherwise — so an empty CSC_LINK is never
+      # passed (electron-builder misreads "" as a certificate path and fails).
+      - name: Configure macOS signing
+        if: runner.os == 'macOS' && env.MAC_SIGN == 'true'
+        run: |
+          {
+            echo "CSC_LINK=${{ secrets.CSC_LINK }}"
+            echo "CSC_KEY_PASSWORD=${{ secrets.CSC_KEY_PASSWORD }}"
+            echo "APPLE_ID=${{ secrets.APPLE_ID }}"
+            echo "APPLE_APP_SPECIFIC_PASSWORD=${{ secrets.APPLE_APP_SPECIFIC_PASSWORD }}"
+            echo "APPLE_TEAM_ID=${{ secrets.APPLE_TEAM_ID }}"
+          } >> "$GITHUB_ENV"
+
       - name: Build and publish to the draft release
         run: npm run release:ci
         env:
           # Lets electron-builder create/upload to the GitHub Release.
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          # Optional macOS code signing + notarization. These only take
-          # effect when the secrets exist; without them the macOS build
-          # is unsigned (and macOS auto-update stays disabled until they
-          # are added). Windows/Linux publish and auto-update regardless.
-          CSC_LINK: ${{ secrets.CSC_LINK }}
-          CSC_KEY_PASSWORD: ${{ secrets.CSC_KEY_PASSWORD }}
-          APPLE_ID: ${{ secrets.APPLE_ID }}
-          APPLE_APP_SPECIFIC_PASSWORD: ${{ secrets.APPLE_APP_SPECIFIC_PASSWORD }}
-          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+          # Unsigned (no secrets) → force-disable identity discovery so the
+          # macOS build completes cleanly instead of hunting for a missing
+          # cert. Flips to 'true' automatically once signing secrets exist.
+          CSC_IDENTITY_AUTO_DISCOVERY: ${{ env.MAC_SIGN }}
 
   publish:
     name: publish release
