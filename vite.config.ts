@@ -30,7 +30,6 @@ export default defineConfig({
               external: [
                 'electron',
                 'electron-store',
-                'active-win',
                 // Loaded from node_modules at runtime (shipped in app
                 // dependencies); bundling it pulls in dynamic requires.
                 'electron-updater',

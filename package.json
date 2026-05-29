@@ -37,7 +37,6 @@
   "dependencies": {
     "@anthropic-ai/sdk": "^0.97.1",
     "@google/generative-ai": "^0.24.1",
-    "active-win": "^8.2.1",
     "electron-store": "^10.0.0",
     "electron-updater": "^6.8.3",
     "jszip": "^3.10.1",

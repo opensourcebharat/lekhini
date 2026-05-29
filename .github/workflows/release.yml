@@ -33,6 +33,15 @@ jobs:
           node-version: '22'
           cache: npm
 
+      # Defensive: the runners ship Python 3.12, which dropped `distutils`
+      # and breaks node-gyp if any native dependency ever needs rebuilding.
+      # Pinning 3.11 (distutils still bundled) keeps electron-builder's
+      # native rebuild step working. Harmless when there are no native deps.
+      - name: Setup Python 3.11 (for node-gyp)
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
       - name: Install dependencies
         run: npm ci
 
