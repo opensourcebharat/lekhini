@@ -66,12 +66,15 @@ class InputSmoother {
 export function makePen(tool: StrokeTool): Tool {
   let working: StrokeItem | null = null;
   const smoother = new InputSmoother();
-  // Pencil should TRACK the hand — a hard graphite tip doesn't flow,
-  // so we keep the input filter light (high alpha floor = minimal
-  // smoothing) and let the rendering grain do the work of feeling
-  // "real". Pen flows like ink, so it gets heavier input smoothing
-  // for soft cursive curves. Highlighter passes raw.
-  const smoothingFloor = tool === 'pencil' ? 0.6 : tool === 'pen' ? 0.35 : 1;
+  // Higher alpha floor = the rendered point sits closer to the true
+  // cursor, so the ink tracks the hand instead of trailing it. On a
+  // mouse/trackpad (no real pressure, coarser sampling) precise
+  // handwriting needs the line to land where the pointer actually is —
+  // lag reads as imprecision. Pencil already tracked tightly (0.6);
+  // pen is raised from 0.35 → 0.55 so it stops floating behind the
+  // cursor. Remaining jitter is cleaned up by perfect-freehand's
+  // streamline at commit time. Highlighter passes raw.
+  const smoothingFloor = tool === 'pencil' ? 0.6 : tool === 'pen' ? 0.55 : 1;
   const useSmoother = tool !== 'highlighter';
 
   const filter = (p: Point): Point =>
@@ -89,7 +92,12 @@ export function makePen(tool: StrokeTool): Tool {
       if (!working) return;
       const next = samples.map(sampleToPoint).map(filter);
       working.points.push(...next);
-      ctx.setDraft({ ...working, points: [...working.points] });
+      // Pass the working item by reference — the LiveLayer reads and
+      // draws it synchronously inside this call, so there's no need to
+      // clone. The previous `{ ...working, points: [...] }` copied the
+      // entire growing point array on every frame: O(n²) over a stroke,
+      // which is what made long handwriting strokes lag progressively.
+      ctx.setDraft(working);
     },
     onUp(sample, ctx) {
       if (!working) return;

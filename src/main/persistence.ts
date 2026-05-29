@@ -1,5 +1,12 @@
 import { GRAPHITE_COLOR } from '../shared/constants';
-import type { Orientation, ProfileId, Theme, ToolId } from '../shared/types';
+import type {
+  AiProfileModels,
+  Orientation,
+  ProfileId,
+  ProviderId,
+  Theme,
+  ToolId,
+} from '../shared/types';
 
 export interface PersistedState {
   orientation: Orientation;
@@ -17,6 +24,35 @@ export interface PersistedState {
   // Off by default — the "remember + auto-save" UX is the recommended
   // path. Lives in Settings → File save.
   alwaysAskSavePath: boolean;
+  // AI integration. The provider/model pair the "Ask AI" button will
+  // use; `null` until the user has configured at least one provider.
+  // API keys themselves are NEVER in PersistedState — they live behind
+  // OS keychain via src/main/ai/credentials.ts.
+  aiActiveProvider: ProviderId | null;
+  aiActiveModel: string | null;
+  // Per-profile user overrides for the default AI system prompt.
+  // Falls back to the profile's built-in prompt (see profiles.ts)
+  // when a profile isn't present here.
+  aiProfilePrompts: Partial<Record<ProfileId, string>>;
+  // Local-first (Ollama) AI. When aiLocalEnabled and a model is
+  // installed, the resolver prefers local over any configured cloud
+  // provider. Keys are never needed for local.
+  aiLocalEnabled: boolean;
+  aiInstalledModels: string[];
+  aiLocalModel: string | null;
+  aiLocalVisionModel: string | null;
+  // Per-profile local model overrides (Phase 2 routing).
+  aiProfileModels: AiProfileModels;
+  // Autocorrect toggles (default OFF — raw stays raw).
+  autocorrectTyped: boolean;
+  autocorrectDrawn: boolean;
+  // CSS font-family for newly created text shapes.
+  defaultTextFont: string;
+  // First-run setup wizard completed (or skipped).
+  aiOnboarded: boolean;
+  // Background auto-update preference. Default ON — new versions
+  // download silently and apply on quit. Toggle in Settings → Updates.
+  autoUpdate: boolean;
 }
 
 export const PERSISTED_DEFAULTS: PersistedState = {
@@ -30,6 +66,19 @@ export const PERSISTED_DEFAULTS: PersistedState = {
   activeTool: 'pencil',
   saveDir: null,
   alwaysAskSavePath: false,
+  aiActiveProvider: null,
+  aiActiveModel: null,
+  aiProfilePrompts: {},
+  aiLocalEnabled: false,
+  aiInstalledModels: [],
+  aiLocalModel: null,
+  aiLocalVisionModel: null,
+  aiProfileModels: {},
+  autocorrectTyped: false,
+  autocorrectDrawn: false,
+  defaultTextFont: 'system-ui, -apple-system, sans-serif',
+  aiOnboarded: false,
+  autoUpdate: true,
 };
 
 interface MinimalStore {

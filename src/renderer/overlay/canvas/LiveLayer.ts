@@ -6,11 +6,15 @@ export class LiveLayer {
   private ctx: CanvasRenderingContext2D;
   private dpr: number;
   private pending: Item | null = null;
-  private rafId: number | null = null;
 
   constructor(canvas: HTMLCanvasElement) {
     this.canvas = canvas;
-    const ctx = canvas.getContext('2d', { alpha: true });
+    // `desynchronized: true` opts into the low-latency canvas path: the
+    // browser is allowed to skip the normal compositor round-trip and
+    // push our pixels to the screen with minimal buffering. This is the
+    // single biggest lever for ink-to-screen latency on the live layer,
+    // where the in-progress stroke is redrawn every pointer frame.
+    const ctx = canvas.getContext('2d', { alpha: true, desynchronized: true });
     if (!ctx) throw new Error('LiveLayer: 2D context unavailable');
     this.ctx = ctx;
     // Floor at 2× so strokes stay crisp on standard-DPI external monitors
@@ -35,16 +39,13 @@ export class LiveLayer {
     this.ctx.setTransform(this.dpr, 0, 0, this.dpr, 0, 0);
   }
 
+  // Renders synchronously. The pointer pipeline already coalesces all
+  // moves within a frame into a single onMove → setDraft call (batched
+  // on its own requestAnimationFrame), so a second rAF here only added
+  // a wasted frame of latency. Drawing immediately on the current frame
+  // is one fewer hop between the hand and the screen.
   draft(item: Item | null): void {
     this.pending = item;
-    if (this.rafId !== null) return;
-    this.rafId = requestAnimationFrame(() => {
-      this.rafId = null;
-      this.flush();
-    });
-  }
-
-  private flush(): void {
     const { ctx } = this;
     ctx.save();
     ctx.setTransform(this.dpr, 0, 0, this.dpr, 0, 0);
@@ -54,7 +55,6 @@ export class LiveLayer {
   }
 
   clear(): void {
-    this.pending = null;
     this.draft(null);
   }
 }

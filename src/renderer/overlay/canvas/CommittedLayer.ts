@@ -10,7 +10,7 @@ export class CommittedLayer {
 
   constructor(canvas: HTMLCanvasElement) {
     this.canvas = canvas;
-    const ctx = canvas.getContext('2d', { alpha: true });
+    const ctx = canvas.getContext('2d', { alpha: true, desynchronized: true });
     if (!ctx) throw new Error('CommittedLayer: 2D context unavailable');
     this.ctx = ctx;
     this.dpr = Math.max(window.devicePixelRatio || 1, 2);

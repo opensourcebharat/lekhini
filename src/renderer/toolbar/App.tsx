@@ -1,15 +1,96 @@
-import { createEffect, createMemo, createSignal, For, onMount, onCleanup, Show } from 'solid-js';
+import {
+  createEffect,
+  createMemo,
+  createSignal,
+  For,
+  Match,
+  onMount,
+  onCleanup,
+  Show,
+  Switch,
+} from 'solid-js';
 import { COLOR_PRESETS, THICKNESS_PRESETS } from '../../shared/constants';
-import { PROFILES, PROFILE_ORDER } from '../../shared/profiles';
+import { PROFILES, PROFILE_ORDER, resolveAiPrompt } from '../../shared/profiles';
 import type {
+  AiStatus,
+  ChatSessionPayload,
+  ConnectionTestResult,
+  LocalModelInfo,
+  OllamaPullProgress,
+  OllamaServiceStatus,
   Orientation,
   ProfileId,
+  ProviderId,
   Theme,
   ToolId,
   ToolSettings,
+  UpdateStatus,
   Whiteboard,
 } from '../../shared/types';
 import { Icons, Logo } from './icons';
+import { ChatPanel } from './ChatPanel';
+
+// The cloud providers (kept as an opt-in fallback). Local (Ollama)
+// has its own settings section, so these mirror maps are cloud-only.
+type CloudProviderId = 'anthropic' | 'openai' | 'gemini' | 'deepseek' | 'sarvam';
+
+const PROVIDER_LABELS: Record<CloudProviderId, string> = {
+  anthropic: 'Anthropic Claude',
+  openai: 'OpenAI ChatGPT',
+  gemini: 'Google Gemini',
+  deepseek: 'DeepSeek',
+  sarvam: 'Sarvam AI',
+};
+
+const PROVIDER_KEY_URLS: Record<CloudProviderId, string> = {
+  anthropic: 'https://console.anthropic.com/settings/keys',
+  openai: 'https://platform.openai.com/api-keys',
+  gemini: 'https://aistudio.google.com/app/apikey',
+  deepseek: 'https://platform.deepseek.com/api_keys',
+  sarvam: 'https://dashboard.sarvam.ai',
+};
+
+interface ModelOption {
+  id: string;
+  label: string;
+}
+
+// Kept in sync with src/main/ai/registry.ts. A static mirror is fine
+// — the list rotates with SDK releases, not user input.
+const MODELS_BY_PROVIDER: Record<CloudProviderId, ModelOption[]> = {
+  anthropic: [
+    { id: 'claude-sonnet-4-5', label: 'Claude Sonnet 4.5 (recommended)' },
+    { id: 'claude-opus-4-5', label: 'Claude Opus 4.5' },
+    { id: 'claude-haiku-4-5', label: 'Claude Haiku 4.5 (fast / cheap)' },
+  ],
+  openai: [
+    { id: 'gpt-4o', label: 'GPT-4o (recommended)' },
+    { id: 'gpt-4o-mini', label: 'GPT-4o mini (fast / cheap)' },
+  ],
+  gemini: [
+    { id: 'gemini-2.0-flash', label: 'Gemini 2.0 Flash (recommended)' },
+    { id: 'gemini-1.5-pro', label: 'Gemini 1.5 Pro' },
+  ],
+  // Text-only — see registry.ts. No vision; routes image snips to text.
+  deepseek: [
+    { id: 'deepseek-chat', label: 'DeepSeek V3 (recommended)' },
+    { id: 'deepseek-reasoner', label: 'DeepSeek R1 (reasoner)' },
+  ],
+  // Vision-capable via Sarvam's own OCR (image → text → solve).
+  sarvam: [
+    { id: 'sarvam-m', label: 'Sarvam-M 24B (recommended)' },
+    { id: 'sarvam-30b', label: 'Sarvam-30B' },
+    { id: 'sarvam-105b', label: 'Sarvam-105B (strongest)' },
+  ],
+};
+
+const DEFAULT_MODEL: Record<CloudProviderId, string> = {
+  anthropic: 'claude-sonnet-4-5',
+  openai: 'gpt-4o',
+  gemini: 'gemini-2.0-flash',
+  deepseek: 'deepseek-chat',
+  sarvam: 'sarvam-m',
+};
 
 // Status-panel discriminator. Both kinds reuse the existing
 // .settings-panel layout slot so they feel native to the toolbar
@@ -31,7 +112,31 @@ interface HubSnapshot {
   saveDir: string | null;
   alwaysAskSavePath: boolean;
   statusPanelOpen: boolean;
+  chatOpen: boolean;
+  aiActiveProvider: ProviderId | null;
+  aiActiveModel: string | null;
+  aiProfilePrompts: Partial<Record<ProfileId, string>>;
+  aiLocalEnabled: boolean;
+  aiInstalledModels: string[];
+  aiLocalModel: string | null;
+  aiLocalVisionModel: string | null;
+  aiProfileModels: Partial<Record<ProfileId, { text?: string; vision?: string }>>;
+  autocorrectTyped: boolean;
+  autocorrectDrawn: boolean;
+  defaultTextFont: string;
+  aiOnboarded: boolean;
+  autoUpdate: boolean;
 }
+
+// Curated, cross-platform-safe font choices for the default-text-font
+// picker. Values are CSS font-family stacks stamped onto TextShapes.
+const TEXT_FONTS: { label: string; value: string }[] = [
+  { label: 'System', value: 'system-ui, -apple-system, sans-serif' },
+  { label: 'Sans', value: 'Helvetica, Arial, sans-serif' },
+  { label: 'Serif', value: "Georgia, 'Times New Roman', serif" },
+  { label: 'Mono', value: "Menlo, Consolas, 'Courier New', monospace" },
+  { label: 'Rounded', value: "'SF Pro Rounded', 'Segoe UI', system-ui, sans-serif" },
+];
 
 type FlyoutTool = 'pencil' | 'pen' | 'eraser' | 'highlighter';
 const FLYOUT_TOOLS = new Set<ToolId>(['pencil', 'pen', 'eraser', 'highlighter']);
@@ -114,6 +219,20 @@ export function ToolbarApp() {
     saveDir: null,
     alwaysAskSavePath: false,
     statusPanelOpen: false,
+    chatOpen: false,
+    aiActiveProvider: null,
+    aiActiveModel: null,
+    aiProfilePrompts: {},
+    aiLocalEnabled: false,
+    aiInstalledModels: [],
+    aiLocalModel: null,
+    aiLocalVisionModel: null,
+    aiProfileModels: {},
+    autocorrectTyped: false,
+    autocorrectDrawn: false,
+    defaultTextFont: 'system-ui, -apple-system, sans-serif',
+    aiOnboarded: false,
+    autoUpdate: true,
   });
   // Status-panel state. Mutually exclusive with the settings panel —
   // when one opens, the layout slot belongs to it. `panelError` holds
@@ -144,17 +263,194 @@ export function ToolbarApp() {
     version: '1.0.0',
     packaged: true,
   });
+  // Auto-update lifecycle, pushed from main via 'updater:status'.
+  const [updateStatus, setUpdateStatus] = createSignal<UpdateStatus | null>(null);
   let scrollRef: HTMLDivElement | undefined;
   let barMainRef: HTMLDivElement | undefined;
+
+  // ── AI Settings section state ───────────────────────────────────
+  // aiStatus tells us which providers have a key (renderer never sees
+  // the key itself). Selected dropdown values + keyInput are local
+  // working state until the user clicks Save.
+  const [aiStatus, setAiStatus] = createSignal<AiStatus[]>([]);
+  const [aiSelectedProvider, setAiSelectedProvider] = createSignal<CloudProviderId>('anthropic');
+  const [aiSelectedModel, setAiSelectedModel] = createSignal<string>(
+    DEFAULT_MODEL.anthropic,
+  );
+  const [aiKeyInput, setAiKeyInput] = createSignal('');
+  const [aiTestResult, setAiTestResult] = createSignal<ConnectionTestResult | null>(null);
+  const [aiBusy, setAiBusy] = createSignal<'saving' | 'testing' | null>(null);
+  // The current chat session, captured here (in the always-mounted
+  // toolbar) rather than inside ChatPanel — ChatPanel only mounts when
+  // chatOpen flips true, and main broadcasts chat:session at that same
+  // instant, so a listener inside the panel misses the first session.
+  // We subscribe in onMount below and hand it down as a prop.
+  const [chatSession, setChatSession] = createSignal<ChatSessionPayload | null>(null);
+
+  const refreshAiStatus = async (): Promise<void> => {
+    const status = await window.pen.ai.getStatus();
+    setAiStatus(status);
+  };
+
+  const isProviderConfigured = (id: ProviderId): boolean =>
+    aiStatus().find((s) => s.provider === id)?.configured ?? false;
+
+  // ── Local (Ollama) AI state ─────────────────────────────────────
+  const [ollamaStatus, setOllamaStatus] = createSignal<OllamaServiceStatus | null>(null);
+  const [localModels, setLocalModels] = createSignal<LocalModelInfo[]>([]);
+  // Per-tag pull progress, keyed by model tag. Present = pull in flight.
+  const [pulls, setPulls] = createSignal<Record<string, OllamaPullProgress>>({});
+
+  const refreshLocal = async (): Promise<void> => {
+    const st = await window.pen.ollama.status();
+    setOllamaStatus(st);
+    setLocalModels(st.running ? await window.pen.ollama.listModels() : []);
+  };
+
+  // ── Learning (RAG) state ────────────────────────────────────────
+  const [ragStats, setRagStats] = createSignal<Record<ProfileId, number>>({
+    general: 0,
+    teacher: 0,
+    trader: 0,
+  });
+  const refreshRag = async (): Promise<void> => {
+    setRagStats(await window.pen.rag.stats());
+  };
+  const resetLearning = async (profile: ProfileId): Promise<void> => {
+    await window.pen.rag.resetProfile(profile);
+    await refreshRag();
+  };
+
+  // ── First-run setup wizard ──────────────────────────────────────
+  const defaultModels = (): LocalModelInfo[] => localModels().filter((m) => m.defaultPull);
+  const defaultModelsTotalGB = (): string =>
+    (defaultModels().reduce((sum, m) => sum + m.approxBytes, 0) / 1e9).toFixed(1);
+  const defaultModelsReady = (): boolean => {
+    const d = defaultModels();
+    return d.length > 0 && d.every((m) => m.installed);
+  };
+  type WizardStep = 'checking' | 'install' | 'start' | 'download' | 'ready';
+  const wizardStep = (): WizardStep => {
+    const st = ollamaStatus();
+    if (!st) return 'checking';
+    if (!st.installed) return 'install';
+    if (!st.running) return 'start';
+    return defaultModelsReady() ? 'ready' : 'download';
+  };
+  const downloadRecommended = async (): Promise<void> => {
+    for (const m of defaultModels()) {
+      if (!m.installed && !pulls()[m.tag]) await pullModel(m.tag);
+    }
+  };
+  const finishOnboarding = (): void =>
+    void window.pen.hub.update({
+      aiLocalEnabled: true,
+      aiOnboarded: true,
+      settingsOpen: false,
+    });
+  const skipOnboarding = (): void => void window.pen.hub.update({ aiOnboarded: true });
+
+  const startOllama = async (): Promise<void> => {
+    setOllamaStatus(await window.pen.ollama.start());
+    await refreshLocal();
+  };
+
+  const pullModel = async (tag: string): Promise<void> => {
+    setPulls((p) => ({ ...p, [tag]: { model: tag, status: 'starting' } }));
+    await window.pen.ollama.pull(tag);
+    setPulls((p) => {
+      const next = { ...p };
+      delete next[tag];
+      return next;
+    });
+    await refreshLocal();
+  };
+
+  const cancelPull = (tag: string): void => {
+    void window.pen.ollama.cancelPull(tag);
+  };
+
+  const deleteModel = async (tag: string): Promise<void> => {
+    await window.pen.ollama.deleteModel(tag);
+    await refreshLocal();
+  };
+
+  const pullPct = (p: OllamaPullProgress): number | null => {
+    if (!p.total || !p.completed) return null;
+    return Math.min(100, Math.round((p.completed / p.total) * 100));
+  };
+
+  const toggleLocalEnabled = (): void => {
+    void window.pen.hub.update({ aiLocalEnabled: !hub().aiLocalEnabled });
+    if (!ollamaStatus()?.running) void startOllama();
+  };
+
+  const toggleAutocorrectTyped = (): void =>
+    void window.pen.hub.update({ autocorrectTyped: !hub().autocorrectTyped });
+  const toggleAutocorrectDrawn = (): void =>
+    void window.pen.hub.update({ autocorrectDrawn: !hub().autocorrectDrawn });
+  const setDefaultFont = (value: string): void =>
+    void window.pen.hub.update({ defaultTextFont: value });
+
+  // Per-profile model pickers (only installed models of each kind).
+  const installedOfKind = (kind: 'text' | 'vision'): LocalModelInfo[] =>
+    localModels().filter((m) => m.kind === kind && m.installed);
+  const setProfileModel = (profile: ProfileId, kind: 'text' | 'vision', tag: string): void =>
+    void window.pen.hub.update({ aiProfileModels: { [profile]: { [kind]: tag } } });
+
+  // Whenever the selected provider changes, snap the model dropdown
+  // to that provider's default (unless it's already a valid model
+  // for the provider — e.g. when the hub broadcasts an existing pair).
+  createEffect(() => {
+    const p = aiSelectedProvider();
+    const valid = MODELS_BY_PROVIDER[p].some((m) => m.id === aiSelectedModel());
+    if (!valid) setAiSelectedModel(DEFAULT_MODEL[p]);
+  });
+
+  // Sync the selected dropdowns to the persisted active provider
+  // once the hub state arrives.
+  createEffect(() => {
+    const ap = hub().aiActiveProvider;
+    const am = hub().aiActiveModel;
+    // The cloud dropdown only tracks cloud providers; local has its
+    // own section, so ignore an 'ollama' active provider here.
+    if (ap && ap !== 'ollama') setAiSelectedProvider(ap);
+    if (am) setAiSelectedModel(am);
+  });
 
   onMount(() => {
     void window.pen.hub.get().then((state) => {
       const s = state as HubSnapshot;
       setHub(s);
       if (s.settingsOpen) refreshSide();
+      // First launch → open Settings so the setup wizard is visible.
+      if (!s.aiOnboarded) void window.pen.hub.update({ settingsOpen: true });
     });
     void window.pen.win.platform().then(setPlatform);
     void window.pen.app.info().then(setAppInfo);
+    void window.pen.updater.get().then(setUpdateStatus);
+    const offUpdater = window.pen.updater.onStatus(setUpdateStatus);
+    onCleanup(offUpdater);
+    void refreshAiStatus();
+    void refreshLocal();
+    void refreshRag();
+    // Live pull progress for the local model installer.
+    const offPull = window.pen.ollama.onPullProgress((p) => {
+      setPulls((prev) => {
+        if (p.done) {
+          const next = { ...prev };
+          delete next[p.model];
+          return next;
+        }
+        return { ...prev, [p.model]: p };
+      });
+    });
+    onCleanup(offPull);
+    // Capture chat sessions for the ChatPanel. Subscribing here (always
+    // mounted) instead of inside the panel is what fixes the "first Ask
+    // AI does nothing" bug — see chatSession's declaration.
+    const offChat = window.pen.chat.onSession(setChatSession);
+    onCleanup(offChat);
     const off = window.pen.hub.onBroadcast((state) => {
       const s = state as HubSnapshot;
       setHub(s);
@@ -329,6 +625,7 @@ export function ToolbarApp() {
     void s.minimized;
     void s.settingsOpen;
     void s.statusPanelOpen;
+    void s.chatOpen;
     void s.thicknessFlyoutOpen;
     void s.profile;
     void s.activeTool;
@@ -455,6 +752,36 @@ export function ToolbarApp() {
   };
   const openScreenPrefs = () => void window.pen.permissions.open('screen');
   const relaunchApp = () => void window.pen.app.relaunch();
+
+  // ── Auto-update actions ─────────────────────────────────────────
+  const checkForUpdates = (): void => void window.pen.updater.check();
+  const installUpdate = (): void => void window.pen.updater.install();
+  const openReleases = (): void => void window.pen.updater.openReleases();
+  const toggleAutoUpdate = (): void =>
+    void window.pen.hub.update({ autoUpdate: !hub().autoUpdate });
+  // One-line, human-readable summary of the current update state.
+  const updateLine = (): string => {
+    const u = updateStatus();
+    if (!u) return '';
+    switch (u.state) {
+      case 'checking':
+        return 'Checking for updates…';
+      case 'available':
+        return `Update available: v${u.version}`;
+      case 'downloading':
+        return `Downloading v${u.version ?? ''}… ${u.percent ?? 0}%`;
+      case 'downloaded':
+        return `v${u.version} ready — restart to update`;
+      case 'none':
+        return "You're on the latest version";
+      case 'unsupported':
+        return 'Automatic updates unavailable on this build';
+      case 'error':
+        return `Update check failed${u.message ? `: ${u.message}` : ''}`;
+      default:
+        return '';
+    }
+  };
   const pickFolderFromError = async () => {
     const dir = (await window.pen.settings.pickSaveDir()) as string | null;
     if (dir) {
@@ -470,11 +797,93 @@ export function ToolbarApp() {
     if (panelKind() === 'permission') void recheckPermission();
   };
 
+  // ── AI action handlers ─────────────────────────────────────────
+  const saveAiKey = async (): Promise<void> => {
+    const key = aiKeyInput().trim();
+    if (key.length === 0) return;
+    setAiBusy('saving');
+    try {
+      await window.pen.ai.setKey(aiSelectedProvider(), key);
+      await refreshAiStatus();
+      setAiKeyInput('');
+      // Snap the active provider/model to what was just configured
+      // so the Ask AI button knows what to use.
+      void window.pen.hub.update({
+        aiActiveProvider: aiSelectedProvider(),
+        aiActiveModel: aiSelectedModel(),
+      });
+      setAiTestResult({ ok: true, message: 'Key saved' });
+    } finally {
+      setAiBusy(null);
+    }
+  };
+  const deleteAiKey = async (): Promise<void> => {
+    await window.pen.ai.deleteKey(aiSelectedProvider());
+    await refreshAiStatus();
+    setAiTestResult(null);
+    // If we just deleted the active provider's key, clear it from
+    // hub so the Ask AI button hides.
+    if (hub().aiActiveProvider === aiSelectedProvider()) {
+      void window.pen.hub.update({
+        aiActiveProvider: null,
+        aiActiveModel: null,
+      });
+    }
+  };
+  const testAiConnection = async (): Promise<void> => {
+    setAiBusy('testing');
+    setAiTestResult(null);
+    try {
+      const result = await window.pen.ai.testConnection(
+        aiSelectedProvider(),
+        aiSelectedModel(),
+      );
+      setAiTestResult(result);
+    } finally {
+      setAiBusy(null);
+    }
+  };
+  const setProfilePrompt = (profile: ProfileId, text: string): void => {
+    void window.pen.hub.update({
+      aiProfilePrompts: { [profile]: text },
+    });
+  };
+  const resetProfilePrompt = (profile: ProfileId): void => {
+    // Empty-string override is treated as "no override" by hub.patch,
+    // so the default from PROFILES kicks back in.
+    void window.pen.hub.update({
+      aiProfilePrompts: { [profile]: '' },
+    });
+  };
+  // Active model picker: whenever the user changes the model dropdown
+  // for the ALREADY-CONFIGURED active provider, persist that choice.
+  const onModelChange = (model: string): void => {
+    setAiSelectedModel(model);
+    if (
+      hub().aiActiveProvider === aiSelectedProvider() &&
+      model !== hub().aiActiveModel
+    ) {
+      void window.pen.hub.update({ aiActiveModel: model });
+    }
+  };
+  const closeChat = (): void => {
+    void window.pen.hub.update({ chatOpen: false });
+  };
+
   // Mirror the side-panel state into a CSS-friendly attribute so the
   // existing layout rules (flex-direction switch in v-mode, etc.)
   // apply uniformly whether settings or a status panel is open.
   const sidePanelOpen = createMemo(() =>
-    hub().settingsOpen || panelKind() !== null,
+    hub().settingsOpen || panelKind() !== null || hub().chatOpen,
+  );
+
+  // Any AI path usable: a cloud provider configured, OR Local AI on with
+  // at least one model installed. Gates every AI entry point so nothing
+  // AI-driven is offered until the user has configured something.
+  const aiReady = createMemo(
+    () =>
+      hub().aiActiveProvider != null ||
+      (hub().aiLocalEnabled && hub().aiInstalledModels.length > 0),
   );
 
   const showHint = (text: string) => setHint(text);
@@ -665,6 +1074,16 @@ export function ToolbarApp() {
                 onMouseEnter={() => showHint('Screenshot · ⌘⇧S')}
                 onMouseLeave={clearHint}
               >{Icons.camera()}</button>
+              <Show when={hub().profile === 'trader' && aiReady()}>
+                <button
+                  class="action-btn"
+                  onClick={() => window.pen.relay.analyze()}
+                  onMouseEnter={() => showHint('Analyze drawn levels with AI')}
+                  onMouseLeave={clearHint}
+                  title="Analyze chart (AI)"
+                  aria-label="Analyze chart"
+                >{Icons.fib()}</button>
+              </Show>
               <button
                 class={`action-btn ${hub().whiteboard !== 'off' ? 'tinted' : ''}`}
                 onClick={cycleBoard}
@@ -859,6 +1278,94 @@ export function ToolbarApp() {
               >{Icons.close()}</button>
             </div>
 
+            {/* ── First-run setup wizard ── */}
+            <Show when={!hub().aiOnboarded}>
+              <div class="settings-section ai-section">
+                <div class="settings-section-label">Set up local AI</div>
+                <Switch>
+                  <Match when={wizardStep() === 'checking'}>
+                    <div class="ai-disclosure">Checking for Ollama…</div>
+                  </Match>
+                  <Match when={wizardStep() === 'install'}>
+                    <div class="ai-disclosure">
+                      Lekhini runs AI privately on your device using Ollama. Install
+                      it once, then come back and re-check.
+                    </div>
+                    <div class="settings-row">
+                      <button
+                        class="settings-toggle"
+                        onClick={() => void window.pen.ollama.installHelp()}
+                      >
+                        Install Ollama
+                      </button>
+                      <button class="settings-toggle" onClick={() => void refreshLocal()}>
+                        Re-check
+                      </button>
+                    </div>
+                  </Match>
+                  <Match when={wizardStep() === 'start'}>
+                    <div class="ai-disclosure">Ollama is installed but not running.</div>
+                    <button class="settings-toggle" onClick={() => void startOllama()}>
+                      Start service
+                    </button>
+                  </Match>
+                  <Match when={wizardStep() === 'download'}>
+                    <div class="ai-disclosure">
+                      Download the recommended models (~{defaultModelsTotalGB()} GB
+                      total). One-time — it runs in the background.
+                    </div>
+                    <For each={defaultModels()}>
+                      {(m) => (
+                        <div class="settings-row">
+                          <span class="settings-row-label">
+                            {m.label} · {(m.approxBytes / 1e9).toFixed(1)} GB
+                          </span>
+                          <Show
+                            when={pulls()[m.tag]}
+                            fallback={
+                              <span class="ai-badge-configured">
+                                {m.installed ? '● Installed' : '—'}
+                              </span>
+                            }
+                          >
+                            {(p) => (
+                              <span class="ai-prompt-row-label">
+                                {pullPct(p()) != null
+                                  ? `${pullPct(p())}%`
+                                  : p().status || 'pulling…'}
+                              </span>
+                            )}
+                          </Show>
+                        </div>
+                      )}
+                    </For>
+                    <button
+                      class="settings-toggle status-btn-primary"
+                      onClick={() => void downloadRecommended()}
+                    >
+                      Download recommended
+                    </button>
+                  </Match>
+                  <Match when={wizardStep() === 'ready'}>
+                    <div class="ai-disclosure">✓ You're ready — local AI is set up.</div>
+                    <button class="settings-toggle status-btn-primary" onClick={finishOnboarding}>
+                      Finish
+                    </button>
+                  </Match>
+                </Switch>
+                <a
+                  class="ai-key-link"
+                  href="#"
+                  onClick={(e) => {
+                    e.preventDefault();
+                    skipOnboarding();
+                  }}
+                >
+                  Skip for now
+                </a>
+              </div>
+            </Show>
+
             <div class="settings-section">
               <div class="settings-section-label">Profile</div>
               <div class="profile-list">
@@ -904,6 +1411,365 @@ export function ToolbarApp() {
               </div>
             </div>
 
+            <div class="settings-section ai-section">
+              <div class="settings-section-label">AI</div>
+
+              {/* ── Local-first AI (Ollama) ── */}
+              <div class="settings-row">
+                <span class="settings-row-label">Local AI (Ollama)</span>
+                <button
+                  class={`settings-toggle ${hub().aiLocalEnabled ? 'on' : ''}`}
+                  onClick={toggleLocalEnabled}
+                >
+                  <span>{hub().aiLocalEnabled ? 'On' : 'Off'}</span>
+                </button>
+              </div>
+              <Show when={hub().aiLocalEnabled}>
+                <div class="settings-row settings-row-stack">
+                  <span class="settings-row-label">
+                    Service
+                    <Show when={ollamaStatus()?.running}>
+                      <span class="ai-badge-configured">
+                        ● Running{ollamaStatus()?.version ? ` ${ollamaStatus()!.version}` : ''}
+                      </span>
+                    </Show>
+                  </span>
+                  <Show when={ollamaStatus() && !ollamaStatus()!.installed}>
+                    <div class="ai-test-result fail">
+                      Ollama isn't installed.
+                      <a
+                        class="ai-key-link"
+                        href="#"
+                        onClick={(e) => {
+                          e.preventDefault();
+                          void window.pen.ollama.installHelp();
+                        }}
+                      >
+                        {' '}
+                        Install Ollama →
+                      </a>
+                    </div>
+                  </Show>
+                  <Show when={ollamaStatus()?.installed && !ollamaStatus()?.running}>
+                    <button class="settings-toggle" onClick={() => void startOllama()}>
+                      Start service
+                    </button>
+                  </Show>
+                </div>
+
+                <Show when={ollamaStatus()?.running}>
+                  <div class="settings-row settings-row-stack">
+                    <span class="settings-row-label">Models per profile</span>
+                    <For each={PROFILE_ORDER}>
+                      {(pid) => (
+                        <div class="ai-prompt-row">
+                          <div class="ai-prompt-row-head">
+                            <span class="ai-prompt-row-label">{PROFILES[pid].label}</span>
+                          </div>
+                          <select
+                            class="settings-toggle settings-toggle-wide ai-select"
+                            value={hub().aiProfileModels[pid]?.text ?? ''}
+                            onChange={(e) =>
+                              setProfileModel(
+                                pid,
+                                'text',
+                                (e.currentTarget as HTMLSelectElement).value,
+                              )
+                            }
+                          >
+                            <option value="">Text: Auto (recommended)</option>
+                            <For each={installedOfKind('text')}>
+                              {(m) => <option value={m.tag}>Text: {m.label}</option>}
+                            </For>
+                          </select>
+                          <select
+                            class="settings-toggle settings-toggle-wide ai-select"
+                            value={hub().aiProfileModels[pid]?.vision ?? ''}
+                            onChange={(e) =>
+                              setProfileModel(
+                                pid,
+                                'vision',
+                                (e.currentTarget as HTMLSelectElement).value,
+                              )
+                            }
+                          >
+                            <option value="">Vision: Auto (recommended)</option>
+                            <For each={installedOfKind('vision')}>
+                              {(m) => <option value={m.tag}>Vision: {m.label}</option>}
+                            </For>
+                          </select>
+                        </div>
+                      )}
+                    </For>
+                  </div>
+                  <div class="settings-row settings-row-stack">
+                    <span class="settings-row-label">Models</span>
+                    <For each={localModels()}>
+                      {(m) => (
+                        <div class="ai-prompt-row">
+                          <div class="ai-prompt-row-head">
+                            <span class="ai-prompt-row-label">
+                              {m.label} · {(m.approxBytes / 1e9).toFixed(1)} GB
+                            </span>
+                            <Show
+                              when={pulls()[m.tag]}
+                              fallback={
+                                <Show
+                                  when={m.installed}
+                                  fallback={
+                                    <button
+                                      class="ai-prompt-reset"
+                                      onClick={() => void pullModel(m.tag)}
+                                    >
+                                      Install
+                                    </button>
+                                  }
+                                >
+                                  <button
+                                    class="ai-prompt-reset"
+                                    onClick={() => void deleteModel(m.tag)}
+                                    title="Remove this model"
+                                  >
+                                    Remove
+                                  </button>
+                                </Show>
+                              }
+                            >
+                              {(p) => (
+                                <span class="ai-prompt-row-label">
+                                  {pullPct(p()) != null
+                                    ? `${pullPct(p())}%`
+                                    : p().status || 'pulling…'}
+                                  <button
+                                    class="ai-prompt-reset"
+                                    onClick={() => cancelPull(m.tag)}
+                                  >
+                                    Cancel
+                                  </button>
+                                </span>
+                              )}
+                            </Show>
+                          </div>
+                        </div>
+                      )}
+                    </For>
+                  </div>
+                </Show>
+              </Show>
+
+              {/* ── Autocorrect + default font ── */}
+              <div class="settings-row">
+                <span class="settings-row-label">Autocorrect typed text</span>
+                <button
+                  class={`settings-toggle ${hub().autocorrectTyped ? 'on' : ''}`}
+                  onClick={toggleAutocorrectTyped}
+                >
+                  <span>{hub().autocorrectTyped ? 'On' : 'Off'}</span>
+                </button>
+              </div>
+              <div class="settings-row">
+                <span class="settings-row-label">Autocorrect drawn text</span>
+                <button
+                  class={`settings-toggle ${hub().autocorrectDrawn ? 'on' : ''}`}
+                  onClick={toggleAutocorrectDrawn}
+                >
+                  <span>{hub().autocorrectDrawn ? 'On' : 'Off'}</span>
+                </button>
+              </div>
+              <div class="settings-row settings-row-stack">
+                <span class="settings-row-label">Default text font</span>
+                <select
+                  class="settings-toggle settings-toggle-wide ai-select"
+                  value={hub().defaultTextFont}
+                  onChange={(e) =>
+                    setDefaultFont((e.currentTarget as HTMLSelectElement).value)
+                  }
+                >
+                  <For each={TEXT_FONTS}>
+                    {(f) => <option value={f.value}>{f.label}</option>}
+                  </For>
+                </select>
+              </div>
+
+              {/* ── Cloud provider (optional fallback) ── */}
+              <div class="settings-section-label">Cloud fallback</div>
+              <div class="settings-row settings-row-stack">
+                <span class="settings-row-label">Provider</span>
+                <select
+                  class="settings-toggle settings-toggle-wide ai-select"
+                  value={aiSelectedProvider()}
+                  onChange={(e) =>
+                    setAiSelectedProvider(
+                      (e.currentTarget as HTMLSelectElement).value as CloudProviderId,
+                    )
+                  }
+                >
+                  <For each={Object.keys(PROVIDER_LABELS) as CloudProviderId[]}>
+                    {(p) => (
+                      <option value={p}>
+                        {PROVIDER_LABELS[p]}
+                        {isProviderConfigured(p) ? ' · configured' : ''}
+                      </option>
+                    )}
+                  </For>
+                </select>
+              </div>
+              <div class="settings-row settings-row-stack">
+                <span class="settings-row-label">Model</span>
+                <select
+                  class="settings-toggle settings-toggle-wide ai-select"
+                  value={aiSelectedModel()}
+                  onChange={(e) =>
+                    onModelChange((e.currentTarget as HTMLSelectElement).value)
+                  }
+                >
+                  <For each={MODELS_BY_PROVIDER[aiSelectedProvider()]}>
+                    {(m) => <option value={m.id}>{m.label}</option>}
+                  </For>
+                </select>
+              </div>
+              <div class="settings-row settings-row-stack">
+                <span class="settings-row-label">
+                  API key
+                  <Show when={isProviderConfigured(aiSelectedProvider())}>
+                    <span class="ai-badge-configured">● Configured</span>
+                  </Show>
+                </span>
+                <input
+                  class="ai-key-input"
+                  type="password"
+                  autocomplete="off"
+                  spellcheck={false}
+                  placeholder={
+                    isProviderConfigured(aiSelectedProvider())
+                      ? 'Replace key…'
+                      : 'Paste API key'
+                  }
+                  value={aiKeyInput()}
+                  onInput={(e) =>
+                    setAiKeyInput((e.currentTarget as HTMLInputElement).value)
+                  }
+                />
+                <div class="ai-key-actions">
+                  <button
+                    class="settings-toggle"
+                    onClick={() => void saveAiKey()}
+                    disabled={aiKeyInput().trim().length === 0 || aiBusy() !== null}
+                  >
+                    {aiBusy() === 'saving' ? 'Saving…' : 'Save'}
+                  </button>
+                  <button
+                    class="settings-toggle"
+                    onClick={() => void testAiConnection()}
+                    disabled={
+                      !isProviderConfigured(aiSelectedProvider()) || aiBusy() !== null
+                    }
+                  >
+                    {aiBusy() === 'testing' ? 'Testing…' : 'Test'}
+                  </button>
+                  <Show when={isProviderConfigured(aiSelectedProvider())}>
+                    <button
+                      class="settings-toggle ai-key-delete"
+                      onClick={() => void deleteAiKey()}
+                      title="Remove the saved key for this provider"
+                    >
+                      Delete
+                    </button>
+                  </Show>
+                </div>
+                <Show when={aiTestResult()}>
+                  {(r) => (
+                    <div
+                      class={`ai-test-result ${r().ok ? 'ok' : 'fail'}`}
+                    >
+                      {r().ok
+                        ? `✓ ${r().message ?? 'OK'}${
+                            r().latencyMs ? ` · ${r().latencyMs}ms` : ''
+                          }`
+                        : `✗ ${r().message ?? 'Failed'}`}
+                    </div>
+                  )}
+                </Show>
+                <a
+                  class="ai-key-link"
+                  href={PROVIDER_KEY_URLS[aiSelectedProvider()]}
+                  onClick={(e) => {
+                    e.preventDefault();
+                    void window.pen.shell.openPath(PROVIDER_KEY_URLS[aiSelectedProvider()]);
+                  }}
+                >
+                  Get a key →
+                </a>
+              </div>
+              <div class="settings-row settings-row-stack">
+                <span class="settings-row-label">Profile prompts</span>
+                <For each={PROFILE_ORDER}>
+                  {(pid) => (
+                    <div class="ai-prompt-row">
+                      <div class="ai-prompt-row-head">
+                        <span class="ai-prompt-row-label">{PROFILES[pid].label}</span>
+                        <Show when={hub().aiProfilePrompts[pid]}>
+                          <button
+                            class="ai-prompt-reset"
+                            onClick={() => resetProfilePrompt(pid)}
+                            title="Restore the built-in prompt"
+                          >
+                            Reset
+                          </button>
+                        </Show>
+                      </div>
+                      <textarea
+                        class="ai-prompt-textarea"
+                        rows={3}
+                        value={resolveAiPrompt(pid, hub().aiProfilePrompts)}
+                        onChange={(e) =>
+                          setProfilePrompt(
+                            pid,
+                            (e.currentTarget as HTMLTextAreaElement).value,
+                          )
+                        }
+                      />
+                    </div>
+                  )}
+                </For>
+              </div>
+              <div class="ai-disclosure">
+                With Local AI on, text and images stay on your device — nothing
+                is sent to a server. The cloud fallback (above) is only used when
+                Local AI is off or no local model is installed; in that case your
+                content goes directly to the selected provider under its own
+                data-handling policy. Lekhini does not log or proxy it.
+              </div>
+
+              {/* ── Learning (on-device RAG) ── */}
+              <div class="settings-section-label">Learning</div>
+              <For each={PROFILE_ORDER}>
+                {(pid) => (
+                  <div class="settings-row">
+                    <span class="settings-row-label">
+                      {PROFILES[pid].label}
+                      <span class="ai-badge-configured">
+                        {ragStats()[pid] ?? 0} examples
+                      </span>
+                    </span>
+                    <button
+                      class="settings-toggle"
+                      onClick={() => void resetLearning(pid)}
+                      disabled={(ragStats()[pid] ?? 0) === 0}
+                      title="Forget everything learned for this profile"
+                    >
+                      Reset
+                    </button>
+                  </div>
+                )}
+              </For>
+              <div class="ai-disclosure">
+                Autocorrect learns from the corrections you accept and from
+                bundled starter examples, stored only on this device. Requires
+                the local embedding model (nomic-embed-text).
+              </div>
+            </div>
+
             <div class="settings-section">
               <div class="settings-section-label">File save</div>
               <div class="settings-row">
@@ -930,6 +1796,72 @@ export function ToolbarApp() {
             </div>
 
             <div class="settings-section">
+              <div class="settings-section-label">Updates</div>
+              <div class="settings-row">
+                <span class="settings-row-label">Automatic updates</span>
+                <button
+                  class={`settings-toggle ${hub().autoUpdate ? 'on' : ''}`}
+                  onClick={toggleAutoUpdate}
+                >
+                  <span>{hub().autoUpdate ? 'On' : 'Off'}</span>
+                </button>
+              </div>
+              <div class="settings-row settings-row-stack">
+                <span class="settings-row-label">
+                  Version
+                  <span class="ai-badge-configured">v{appInfo().version}</span>
+                </span>
+                <Show when={updateLine()}>
+                  <div
+                    class={`ai-test-result ${
+                      updateStatus()?.state === 'error' ? 'fail' : 'ok'
+                    }`}
+                  >
+                    {updateLine()}
+                  </div>
+                </Show>
+                <div class="ai-key-actions">
+                  <button
+                    class="settings-toggle"
+                    onClick={checkForUpdates}
+                    disabled={
+                      updateStatus()?.state === 'checking' ||
+                      updateStatus()?.state === 'downloading'
+                    }
+                  >
+                    {updateStatus()?.state === 'checking' ? 'Checking…' : 'Check for updates'}
+                  </button>
+                  <Show
+                    when={
+                      updateStatus()?.state === 'downloaded' ||
+                      updateStatus()?.state === 'available'
+                    }
+                  >
+                    <button class="settings-toggle status-btn-primary" onClick={installUpdate}>
+                      {updateStatus()?.state === 'downloaded'
+                        ? 'Restart to update'
+                        : 'Download & install'}
+                    </button>
+                  </Show>
+                </div>
+                {/* Manual fallback when auto-update can't apply (dev run,
+                    or unsigned macOS where Squirrel refuses updates). */}
+                <Show when={updateStatus()?.state === 'unsupported'}>
+                  <a
+                    class="ai-key-link"
+                    href="#"
+                    onClick={(e) => {
+                      e.preventDefault();
+                      openReleases();
+                    }}
+                  >
+                    Download the latest from GitHub →
+                  </a>
+                </Show>
+              </div>
+            </div>
+
+            <div class="settings-section">
               <div class="settings-section-label">About</div>
               <div class="about-card">
                 <div class="about-header">
@@ -947,6 +1879,23 @@ export function ToolbarApp() {
               </div>
             </div>
           </div>
+        </Show>
+
+        {/* ─── CHAT PANEL (AI integration) ──────────────────────────
+             Shares the dock slot with Settings + Status. Mutual
+             exclusion is enforced in hub.patch — opening this closes
+             the others. Settings still has render priority though,
+             so a user mid-chat who opens Settings sees Settings and
+             the chat is hidden until they close it. */}
+        <Show when={hub().chatOpen && !hub().settingsOpen && panelKind() === null}>
+          <ChatPanel
+            provider={hub().aiActiveProvider}
+            model={hub().aiActiveModel}
+            aiReady={aiReady()}
+            session={chatSession()}
+            promptOverrides={hub().aiProfilePrompts}
+            onClose={closeChat}
+          />
         </Show>
 
         {/* ─── STATUS PANEL (permission / save error) ──────────────
