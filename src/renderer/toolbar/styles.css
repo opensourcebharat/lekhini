@@ -574,28 +574,51 @@ html, body {
 }
 
 /* ─────────────────── MINIMIZED PILL ─────────────────── */
+/* Layout: outer .mini is the drag region (thin border around the
+   pill) so the user can still move the collapsed toolbar. The inner
+   .mini-logo fills almost the whole pill and is the click target
+   that restores — click events on drag regions are eaten by Electron,
+   so the previous setup (whole pill draggable, tiny logo span as the
+   only click target) made restoring fragile because users couldn't
+   reliably hit the 30px logo inside the 56px pill. */
 
 .mini {
   width: 100%;
   height: 100%;
+  position: relative;
+  cursor: pointer;
+  -webkit-app-region: drag;
+}
+.mini-logo {
+  appearance: none;
+  background: transparent;
+  border: none;
+  padding: 0;
+  color: inherit;
+  font: inherit;
+  position: absolute;
+  inset: 5px;
+  -webkit-app-region: no-drag;
   display: flex;
   align-items: center;
   justify-content: center;
+  border-radius: 8px;
   cursor: pointer;
-  -webkit-app-region: drag;
-  position: relative;
+  transition: background 0.15s, transform 0.15s cubic-bezier(0.2, 0.7, 0.2, 1);
 }
-.mini::after {
-  content: '';
-  position: absolute;
-  top: 5px;
-  width: 22px;
-  height: 3px;
-  border-radius: 2px;
-  background: var(--separator);
+.mini-logo:hover {
+  background: var(--hover);
+  transform: scale(1.04);
 }
-.mini-logo { -webkit-app-region: no-drag; display: inline-flex; }
-.mini-logo svg, .mini-logo img { width: 30px; height: 30px; border-radius: 6px; }
+.mini-logo:active { transform: scale(0.97); }
+.mini-logo svg,
+.mini-logo img {
+  width: 36px;
+  height: 36px;
+  border-radius: 7px;
+  object-fit: contain;
+  pointer-events: none; /* clicks land on .mini-logo, not the image */
+}
 
 /* ─────────────────── SETTINGS DROPDOWN ─────────────────── */
 
@@ -1122,4 +1145,358 @@ html, body {
 }
 .bar[data-orient='v'] .bar-footer-controls {
   justify-content: center;
+}
+
+/* ─────────────────── AI SETTINGS SECTION ─────────────────── */
+/* Reuses .settings-row-stack for label-on-top layout. The provider
+   and model selects use a native <select> styled to match the
+   existing .settings-toggle palette. */
+
+.ai-section .ai-select {
+  appearance: auto;
+  background: var(--input-bg);
+  color: var(--text);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 5px 10px;
+  font-size: 11.5px;
+  cursor: pointer;
+}
+
+.ai-key-input {
+  appearance: none;
+  width: 100%;
+  background: var(--input-bg);
+  color: var(--text);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 6px 10px;
+  font-size: 12px;
+  font-family: "SF Mono", "JetBrains Mono", Menlo, monospace;
+  outline: none;
+  letter-spacing: 0.02em;
+}
+.ai-key-input:focus {
+  border-color: var(--gold);
+  box-shadow: 0 0 0 2px rgba(216, 181, 114, 0.18);
+}
+
+.ai-key-actions {
+  display: flex;
+  gap: 6px;
+  align-items: center;
+  flex-wrap: wrap;
+}
+.ai-key-actions .settings-toggle { padding: 5px 12px; }
+
+.ai-key-delete {
+  color: #e74c3c !important;
+  border-color: rgba(231, 76, 60, 0.30) !important;
+}
+.ai-key-delete:hover { background: rgba(231, 76, 60, 0.10) !important; }
+
+.ai-badge-configured {
+  display: inline-block;
+  margin-left: 8px;
+  font-size: 9.5px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: #34c759;
+}
+
+.ai-test-result {
+  font-size: 10.5px;
+  padding: 5px 8px;
+  border-radius: 5px;
+  font-weight: 500;
+}
+.ai-test-result.ok {
+  color: #34c759;
+  background: rgba(52, 199, 89, 0.10);
+  border: 1px solid rgba(52, 199, 89, 0.25);
+}
+.ai-test-result.fail {
+  color: #e74c3c;
+  background: rgba(231, 76, 60, 0.10);
+  border: 1px solid rgba(231, 76, 60, 0.25);
+}
+
+.ai-key-link {
+  font-size: 10.5px;
+  color: var(--hint-accent);
+  text-decoration: none;
+  align-self: flex-end;
+  cursor: pointer;
+}
+.ai-key-link:hover { text-decoration: underline; }
+
+.ai-prompt-row {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin-bottom: 6px;
+}
+.ai-prompt-row-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+.ai-prompt-row-label {
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--text);
+}
+.ai-prompt-reset {
+  appearance: none;
+  background: transparent;
+  border: none;
+  color: var(--hint-accent);
+  font-size: 10px;
+  cursor: pointer;
+  padding: 0;
+}
+.ai-prompt-reset:hover { text-decoration: underline; }
+
+.ai-prompt-textarea {
+  appearance: none;
+  width: 100%;
+  background: var(--input-bg);
+  color: var(--text);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 6px 8px;
+  font-size: 11px;
+  font-family: inherit;
+  line-height: 1.4;
+  resize: vertical;
+  outline: none;
+}
+.ai-prompt-textarea:focus {
+  border-color: var(--gold);
+  box-shadow: 0 0 0 2px rgba(216, 181, 114, 0.18);
+}
+
+.ai-disclosure {
+  font-size: 10px;
+  line-height: 1.4;
+  color: var(--hint);
+  font-style: italic;
+  padding: 6px 8px;
+  border-left: 2px solid var(--separator);
+  margin-top: 4px;
+}
+
+/* ─────────────────── CHAT PANEL ─────────────────── */
+
+.chat-panel {
+  /* Reuses .settings-panel chrome via shared class — these tweak
+     internal layout to host: header, thumbnail, message list, composer. */
+  padding: 10px 12px;
+  gap: 8px;
+}
+
+.chat-header-meta {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  min-width: 0;
+  flex: 1 1 auto;
+}
+
+.chat-provider-badge {
+  font-size: 10px;
+  letter-spacing: 0.02em;
+  color: var(--hint);
+  background: var(--group-bg);
+  border: 1px solid var(--group-border);
+  padding: 2px 6px;
+  border-radius: 4px;
+  font-family: "SF Mono", "JetBrains Mono", Menlo, monospace;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 220px;
+}
+
+.chat-thumb-wrap {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px;
+  background: var(--group-bg);
+  border: 1px solid var(--group-border);
+  border-radius: 6px;
+}
+.chat-thumb {
+  display: block;
+  max-width: 80px;
+  max-height: 60px;
+  border-radius: 4px;
+  object-fit: contain;
+  background: #000;
+}
+.chat-thumb-meta {
+  font-size: 10.5px;
+  color: var(--hint);
+  font-weight: 600;
+}
+
+.chat-empty {
+  font-size: 11px;
+  color: var(--hint);
+  padding: 16px 8px;
+  text-align: center;
+  font-style: italic;
+}
+
+.chat-messages {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 4px 2px;
+}
+
+.chat-bubble {
+  padding: 8px 10px;
+  border-radius: 8px;
+  font-size: 11.5px;
+  line-height: 1.45;
+  max-width: 100%;
+  word-wrap: break-word;
+  word-break: break-word;
+}
+.chat-bubble-user {
+  background: rgba(216, 181, 114, 0.14);
+  border: 1px solid rgba(216, 181, 114, 0.28);
+  color: var(--text);
+  align-self: flex-end;
+  max-width: 90%;
+}
+.chat-bubble-assistant {
+  background: var(--group-bg);
+  border: 1px solid var(--group-border);
+  color: var(--text);
+  align-self: flex-start;
+  max-width: 100%;
+}
+
+.chat-typing {
+  display: inline-block;
+  color: var(--hint);
+  font-style: italic;
+  animation: chatTypingPulse 1.4s ease-in-out infinite;
+}
+@keyframes chatTypingPulse {
+  0%, 100% { opacity: 0.45; }
+  50% { opacity: 0.85; }
+}
+
+.chat-error {
+  color: #e74c3c;
+  font-size: 11px;
+}
+
+/* Markdown rendering inside assistant bubbles — keep it tight; the
+   panel is narrow. */
+.chat-markdown { display: block; }
+.chat-markdown p { margin: 0 0 6px 0; }
+.chat-markdown p:last-child { margin-bottom: 0; }
+.chat-markdown ul, .chat-markdown ol { margin: 4px 0 6px 16px; padding: 0; }
+.chat-markdown li { margin-bottom: 2px; }
+.chat-markdown code {
+  background: var(--input-bg);
+  border: 1px solid var(--border);
+  border-radius: 3px;
+  padding: 0 4px;
+  font-family: "SF Mono", "JetBrains Mono", Menlo, monospace;
+  font-size: 10.5px;
+}
+.chat-markdown pre {
+  background: var(--input-bg);
+  border: 1px solid var(--border);
+  border-radius: 5px;
+  padding: 8px 10px;
+  overflow-x: auto;
+  margin: 4px 0 6px 0;
+}
+.chat-markdown pre code {
+  background: transparent;
+  border: none;
+  padding: 0;
+}
+.chat-markdown strong { font-weight: 600; }
+.chat-markdown em { font-style: italic; }
+.chat-markdown h1, .chat-markdown h2, .chat-markdown h3 {
+  font-size: 12px;
+  font-weight: 700;
+  margin: 6px 0 4px 0;
+}
+.chat-markdown a {
+  color: var(--gold);
+  text-decoration: underline;
+  text-decoration-thickness: 1px;
+}
+
+.chat-composer {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  flex-shrink: 0;
+  border-top: 1px solid var(--separator);
+  padding-top: 8px;
+}
+.chat-input {
+  appearance: none;
+  width: 100%;
+  background: var(--input-bg);
+  color: var(--text);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 6px 8px;
+  font-size: 12px;
+  font-family: inherit;
+  line-height: 1.4;
+  resize: vertical;
+  outline: none;
+}
+.chat-input:focus {
+  border-color: var(--gold);
+  box-shadow: 0 0 0 2px rgba(216, 181, 114, 0.18);
+}
+.chat-input[disabled] { opacity: 0.55; cursor: not-allowed; }
+
+.chat-send {
+  appearance: none;
+  align-self: flex-end;
+  background: linear-gradient(180deg, var(--gold) 0%, var(--gold-strong) 100%);
+  color: var(--gold-text);
+  border: 1px solid rgba(0, 0, 0, 0.25);
+  border-radius: 6px;
+  padding: 5px 14px;
+  font-size: 11.5px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: filter 0.12s, transform 0.10s;
+}
+.chat-send:hover { filter: brightness(1.05); }
+.chat-send:active { transform: scale(0.97); }
+.chat-send[disabled] {
+  filter: grayscale(0.5);
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+.chat-cancel {
+  background: transparent;
+  border-color: rgba(231, 76, 60, 0.4);
+  color: #e74c3c;
+}
+.chat-cancel:hover {
+  background: rgba(231, 76, 60, 0.10);
+  filter: none;
 }

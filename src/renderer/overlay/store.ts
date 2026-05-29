@@ -23,6 +23,9 @@ export interface OverlayState {
 interface OverlayActions {
   commit(item: Item): void;
   replace(itemId: string, next: Item): void;
+  // Remove several items and add new ones in ONE history entry, so the
+  // whole swap (e.g. recognized ink → corrected text) is a single undo.
+  replaceMany(removeIds: string[], add: Item[]): void;
   remove(itemId: string): void;
   setItem(itemId: string, next: Item): void;
   snapshot(): void;
@@ -62,6 +65,16 @@ export const store = createStore<Store>((set, get) => ({
     nextItems[idx] = next;
     const nextPast = [...past, items].slice(-HISTORY_LIMIT);
     set({ items: nextItems, past: nextPast, future: [] });
+  },
+
+  replaceMany(removeIds, add) {
+    const { items, past } = get();
+    const drop = new Set(removeIds);
+    const kept = items.filter((i) => !drop.has(i.id));
+    // No-op if nothing matched and nothing to add — don't pollute history.
+    if (kept.length === items.length && add.length === 0) return;
+    const nextPast = [...past, items].slice(-HISTORY_LIMIT);
+    set({ items: [...kept, ...add], past: nextPast, future: [] });
   },
 
   remove(itemId) {

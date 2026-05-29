@@ -1,5 +1,5 @@
 import { getStroke } from 'perfect-freehand';
-import { FIB_LEVELS } from '../../../shared/constants';
+import { FIB_LEVELS, fibColor } from '../../../shared/constants';
 import type { Item } from '../../../shared/types';
 
 // Two cached noise tiles for pencil rendering:
@@ -86,18 +86,19 @@ export function drawItem(ctx: CanvasRenderingContext2D, item: Item, live = false
 function drawStroke(
   ctx: CanvasRenderingContext2D,
   item: Extract<Item, { kind: 'stroke' }>,
-  _live: boolean,
+  live: boolean,
 ): void {
   if (item.points.length === 0) return;
   const tool = item.tool;
   const isHi = tool === 'highlighter';
   const isPencil = tool === 'pencil';
 
-  // Pencil renders at 0.85× the requested width — a hard pencil tip
+  // Pencil renders at 0.75× the requested width — a hard pencil tip
   // lays down a finer line than an inked brush of the same nominal
-  // size, and this scale is what makes the two tools read as
-  // mechanically different at the same slider value.
-  const widthScale = isPencil ? 0.85 : 1;
+  // size. This scale both makes the two tools read as mechanically
+  // different at the same slider value and keeps pencil handwriting
+  // compact, so small letters don't eat horizontal space.
+  const widthScale = isPencil ? 0.75 : 1;
   const baseWidth = isHi ? Math.max(item.width, 14) : item.width * widthScale;
   const effectiveWidth = baseWidth;
 
@@ -107,6 +108,42 @@ function drawStroke(
   // use their settings directly.
   const baseAlpha = isHi ? Math.min(item.opacity, 0.35) : item.opacity;
   const effectiveAlpha = isPencil ? baseAlpha * 0.88 : baseAlpha;
+
+  // Fast path for the in-progress (live) stroke: draw the points as a
+  // round-capped, round-joined polyline instead of running getStroke
+  // over the whole array every frame. getStroke is O(n) per call, and
+  // calling it each frame on a growing stroke is O(n²) — the dominant
+  // source of latency on long handwriting strokes. A polyline at the
+  // effective width is visually near-identical to the committed pen
+  // outline (which is now uniform / untapered) and to a pencil/marker
+  // core; the full getStroke render — plus pencil grain — runs once on
+  // commit. This keeps the live cursor glued to the hand regardless of
+  // stroke length.
+  if (live) {
+    ctx.save();
+    if (isHi) ctx.globalCompositeOperation = 'multiply';
+    ctx.globalAlpha = effectiveAlpha;
+    ctx.strokeStyle = item.color;
+    ctx.fillStyle = item.color;
+    ctx.lineWidth = effectiveWidth;
+    ctx.lineCap = 'round';
+    ctx.lineJoin = 'round';
+    const pts = item.points;
+    if (pts.length === 1) {
+      // A single down-sample has no segment to stroke — lay a dot so
+      // the very first contact is visible immediately.
+      ctx.beginPath();
+      ctx.arc(pts[0].x, pts[0].y, effectiveWidth / 2, 0, Math.PI * 2);
+      ctx.fill();
+    } else {
+      ctx.beginPath();
+      ctx.moveTo(pts[0].x, pts[0].y);
+      for (let i = 1; i < pts.length; i++) ctx.lineTo(pts[i].x, pts[i].y);
+      ctx.stroke();
+    }
+    ctx.restore();
+    return;
+  }
 
   // Tool-specific stroke profiles. The key distinctions:
   //
@@ -130,31 +167,40 @@ function drawStroke(
       end: { taper: 0, cap: true },
     };
   } else if (isPencil) {
-    // Tuned for fine-handwriting at sub-pixel widths: lower thinning so
-    // a 0.5–1px pencil doesn't get pinched into invisibility by
-    // perfect-freehand's outline algorithm, and lower streamline so the
-    // line actually follows the writer's wrist instead of being eaten
-    // by post-hoc smoothing. Tapers shrink proportionally so very fine
-    // strokes still end cleanly.
+    // Precise thin handwriting, same principle as the pen: a fully
+    // UNIFORM mark. thinning is now 0 (was 0.04) and the start/end
+    // tapers are dropped (were up to 4px / 7px) — together those were
+    // still widening mid-stroke and pinching the ends, the milder
+    // version of the pen's old ballooning. A hard graphite tip lays a
+    // constant-width line anyway; its "pencil" identity comes from the
+    // grain pass below, not from width variation. Low streamline keeps
+    // the line tracking the wrist for small letters.
     opts = {
-      thinning: 0.04,
+      thinning: 0,
       smoothing: 0.28,
       streamline: 0.18,
       easing: (t: number) => t,
       simulatePressure: false,
-      start: { taper: Math.min(effectiveWidth * 0.5, 4), cap: true },
-      end: { taper: Math.min(effectiveWidth * 0.7, 7), cap: true },
+      start: { taper: 0, cap: true },
+      end: { taper: 0, cap: true },
     };
   } else {
-    // pen
+    // pen — tuned for precise thin handwriting on a mouse/trackpad.
+    // simulatePressure is OFF: a mouse reports no real pressure, so
+    // perfect-freehand's velocity-derived fake pressure inflated slow
+    // strokes — and handwriting IS slow, so letters ballooned and
+    // smeared together ("large space with minimum movement"). With
+    // thinning 0 the pen lays a uniform-width line that tracks the hand
+    // 1:1, and the tapers are dropped so short strokes don't get pinched
+    // or stretched. Light streamline keeps curves smooth without lag.
     opts = {
-      thinning: 0.45,
-      smoothing: 0.55,
-      streamline: 0.5,
+      thinning: 0,
+      smoothing: 0.4,
+      streamline: 0.34,
       easing: (t: number) => t,
-      simulatePressure: true,
-      start: { taper: Math.min(effectiveWidth * 1, 12), cap: true },
-      end: { taper: Math.min(effectiveWidth * 1.8, 28), cap: true },
+      simulatePressure: false,
+      start: { taper: 0, cap: true },
+      end: { taper: 0, cap: true },
     };
   }
 
@@ -163,7 +209,7 @@ function drawStroke(
     {
       size: effectiveWidth,
       ...opts,
-      last: !_live,
+      last: !live,
     },
   );
   if (strokePoints.length < 2) return;
@@ -228,28 +274,98 @@ function drawLine(
   ctx.restore();
 }
 
+// Trailing-zero-free ratio label: 0, 0.236, 0.5, 1 …
+function formatFibLevel(L: number): string {
+  return String(L);
+}
+
+// Percentage readout for a level: 0%, 23.6%, 50%, 61.8%, 100% …
+function formatFibPct(L: number): string {
+  const p = L * 100;
+  return `${Number.isInteger(p) ? p : Number(p.toFixed(1))}%`;
+}
+
 function drawFib(ctx: CanvasRenderingContext2D, item: Extract<Item, { kind: 'fib' }>): void {
+  const levels = (item.levels.length ? item.levels : FIB_LEVELS).slice().sort((a, b) => a - b);
+  if (levels.length === 0) return;
+
+  // Horizontal span IS the box width the user dragged out — the hand
+  // tool's corner handles edit p1.x / p2.x to widen or narrow it, so we
+  // no longer force a fixed rightward extension. Only when the box is
+  // essentially zero-width (the fib was dragged straight down) do we
+  // fall back to a default projection so the levels stay visible.
+  const left = Math.min(item.p1.x, item.p2.x);
+  const right = Math.max(item.p1.x, item.p2.x);
+  const MIN_FIB_W = 16;
+  const DEFAULT_FIB_W = 220;
+  const xLeft = left;
+  const xRight = right - left >= MIN_FIB_W ? right : left + DEFAULT_FIB_W;
+  // A retracement is measured back from the END of the move toward its
+  // START, the same as TradingView / MT: 0% sits at the second point
+  // (p2, where the drag ended — the impulse's extreme) and 100% at the
+  // first point (p1, the move's origin). Level L is the fraction of the
+  // move retraced, so it interpolates from p2 (L=0) to p1 (L=1).
+  // Anchoring at p1 for L=0 — as the old code did — mirrored every
+  // level (e.g. the 0.618 line landed at the 0.382 position).
+  const yAt = (L: number): number => item.p2.y + (item.p1.y - item.p2.y) * L;
+
   ctx.save();
-  ctx.globalAlpha = item.opacity;
-  ctx.strokeStyle = item.color;
-  ctx.fillStyle = item.color;
-  ctx.lineWidth = 1;
+
+  // Translucent colored zones between consecutive levels — the banded
+  // look of a trading-chart fib. Each band is tinted with the color of
+  // the level it retraces INTO (its upper boundary), kept faint so the
+  // underlying chart stays readable through it.
+  for (let i = 0; i < levels.length - 1; i++) {
+    const yA = yAt(levels[i]);
+    const yB = yAt(levels[i + 1]);
+    ctx.globalAlpha = item.opacity * 0.1;
+    ctx.fillStyle = fibColor(levels[i + 1]);
+    ctx.fillRect(xLeft, Math.min(yA, yB), xRight - xLeft, Math.abs(yB - yA));
+  }
+
   ctx.font = '11px -apple-system, system-ui, sans-serif';
-  const dx = Math.abs(item.p2.x - item.p1.x);
-  const xLeft = Math.min(item.p1.x, item.p2.x) - 4;
-  const xRight = Math.max(item.p1.x, item.p2.x) + Math.max(dx, 120);
-  const levels = item.levels.length ? item.levels : FIB_LEVELS;
+  ctx.textBaseline = 'middle';
 
   for (const L of levels) {
-    const y = item.p1.y + (item.p2.y - item.p1.y) * L;
+    const y = yAt(L);
+    const col = fibColor(L);
+    // Emphasize the two levels traders watch most — the 50% midpoint
+    // and the 0.618 golden ratio — with a slightly heavier line.
+    const key = L === 0.5 || L === 0.618;
+
+    ctx.globalAlpha = item.opacity;
+    ctx.strokeStyle = col;
+    ctx.lineWidth = key ? 1.6 : 1;
+    // +0.5 keeps the 1px lines crisp on the device pixel grid.
     ctx.beginPath();
-    ctx.moveTo(xLeft, y);
-    ctx.lineTo(xRight, y);
+    ctx.moveTo(xLeft, y + 0.5);
+    ctx.lineTo(xRight, y + 0.5);
     ctx.stroke();
-    if (item.showLabels) {
-      ctx.fillText(`${L.toFixed(3)}`, xLeft - 32, y + 4);
+
+    if (!item.showLabels) continue;
+
+    const label = `${formatFibLevel(L)}  ${formatFibPct(L)}`;
+    const padX = 5;
+    const chipH = 16;
+    const chipW = ctx.measureText(label).width + padX * 2;
+    // Sit the chip just left of the lines; if that would run off the
+    // left edge, tuck it inside the level instead so it stays visible.
+    let chipX = xLeft - chipW - 6;
+    let textX = chipX + padX;
+    if (chipX < 2) {
+      chipX = xLeft + 6;
+      textX = chipX + padX;
     }
+
+    ctx.globalAlpha = item.opacity;
+    ctx.fillStyle = col;
+    ctx.beginPath();
+    ctx.roundRect(chipX, y - chipH / 2, chipW, chipH, 3);
+    ctx.fill();
+    ctx.fillStyle = '#ffffff';
+    ctx.fillText(label, textX, y);
   }
+
   ctx.restore();
 }
 
@@ -377,7 +493,10 @@ function drawArrow(ctx: CanvasRenderingContext2D, item: Extract<Item, { kind: 'a
 function drawText(ctx: CanvasRenderingContext2D, item: Extract<Item, { kind: 'text' }>): void {
   ctx.save();
   ctx.fillStyle = item.color;
-  ctx.font = `${item.fontSize}px -apple-system, system-ui, sans-serif`;
+  // Honor the per-item font family stamped from the user's default-font
+  // setting; fall back to the system stack for items saved before it.
+  const family = item.fontFamily ?? 'system-ui, -apple-system, sans-serif';
+  ctx.font = `${item.fontSize}px ${family}`;
   ctx.textBaseline = 'top';
   const lines = item.text.split('\n');
   for (let i = 0; i < lines.length; i++) {

@@ -13,7 +13,9 @@ let toolbar: BrowserWindow | null = null;
 // of drifting inward each open/close cycle.
 let anchorPos: { x: number; y: number } | null = null;
 
-const MIN_SIZE = { w: 56, h: 56 };
+// Collapsed pill: square enough to be a chunky tap target and big
+// enough that a 36px logo with a 5px drag border breathes.
+const MIN_SIZE = { w: 64, h: 64 };
 
 function defaultPosition(orientation: Orientation, minimized: boolean, settingsOpen: boolean) {
   const primary = screen.getPrimaryDisplay();

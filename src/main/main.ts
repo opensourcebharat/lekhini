@@ -10,6 +10,10 @@ import {
 import { createToolbar, getToolbar, registerToolbarIpc, resizeToolbar } from './windows/toolbar';
 import { registerPermissionsIpc } from './permissions';
 import { registerCaptureIpc } from './capture';
+import { registerAiIpc } from './ai/ipc';
+import { registerRagIpc } from './ai/ragIpc';
+import { shutdown as shutdownOllama } from './ai/ollamaService';
+import { initAutoUpdates, registerUpdaterIpc } from './updater';
 import {
   registerDrawingHotkeys,
   registerEscapeWhileDrawing,
@@ -36,6 +40,9 @@ app.whenReady().then(async () => {
   registerPermissionsIpc();
   registerCaptureIpc();
   registerToolbarIpc();
+  registerAiIpc();
+  registerRagIpc();
+  registerUpdaterIpc();
 
   for (const display of screen.getAllDisplays()) {
     console.log('[pen] creating overlay for display', display.id, display.bounds);
@@ -50,6 +57,10 @@ app.whenReady().then(async () => {
 
   registerHotkeys();
 
+  // Kick off background update checks once windows exist to receive the
+  // 'updater:status' broadcasts. No-op (→ 'unsupported') in dev / unsigned.
+  initAutoUpdates();
+
   onChange((state, changed) => {
     if (changed.has('drawMode')) {
       console.log('[pen] drawMode ->', state.drawMode);
@@ -59,16 +70,18 @@ app.whenReady().then(async () => {
       registerEscapeWhileDrawing(state.drawMode);
       registerDrawingHotkeys(state.drawMode);
     }
-    // The status panel (permission / save error) occupies the same
-    // dock slot as Settings in the toolbar, so we treat either being
-    // open as "the side panel is showing" for window-resize purposes.
-    const sidePanelOpen = state.settingsOpen || state.statusPanelOpen;
+    // Three panels share the dock slot: settings, status (permission
+    // / save error), and AI chat. Any of them being open means the
+    // toolbar window should grow to fit a side panel.
+    const sidePanelOpen =
+      state.settingsOpen || state.statusPanelOpen || state.chatOpen;
     if (changed.has('orientation')) {
       resizeToolbar(state.orientation, state.minimized, sidePanelOpen, 'default');
     } else if (
       changed.has('minimized') ||
       changed.has('settingsOpen') ||
-      changed.has('statusPanelOpen')
+      changed.has('statusPanelOpen') ||
+      changed.has('chatOpen')
     ) {
       resizeToolbar(state.orientation, state.minimized, sidePanelOpen, 'keep');
     }
@@ -79,6 +92,8 @@ app.whenReady().then(async () => {
 
 app.on('will-quit', () => {
   unregisterHotkeys();
+  // Stop only an Ollama daemon we spawned; abort any in-flight pulls.
+  shutdownOllama();
 });
 
 app.on('window-all-closed', () => {

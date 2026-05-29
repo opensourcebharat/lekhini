@@ -45,42 +45,61 @@ Bug fixes and small polish that don't change behavior intentionally:
 - Dependency bumps that don't change behavior.
 - Documentation-only changes.
 
-## Cutting a release
+## Cutting a release (automated)
 
-1. Make sure `main` is green: `npm run typecheck` and `npm run build`
-   succeed locally. CI on the release commit must also be green.
-2. Decide the version bump (major / minor / patch) per the policy above.
-3. Update `CHANGELOG.md`:
-   - Move items from `[Unreleased]` into a new versioned section.
-   - Add a dated heading: `## [X.Y.Z] — YYYY-MM-DD`.
-   - Update the link references at the bottom of the file.
-4. Bump `package.json`'s `version` field to the new version. Do NOT
-   use `npm version` if your workflow doesn't also tag — keep these
-   steps explicit.
-5. Commit:
+Releases are **tag-driven**. One command bumps the version, rolls the
+changelog, commits, tags, and pushes — then CI builds every OS and
+publishes the GitHub Release. You do not build or upload anything by hand.
+
+1. Make sure the branch is clean and green (`npm run typecheck`, and CI
+   on the latest commit is passing). Land all release-worthy changes
+   first, with notes under `## [Unreleased]` in `CHANGELOG.md`.
+2. Run the release script with the bump type:
+   ```bash
+   npm run release          # patch (X.Y.Z+1) — the default
+   npm run release:minor    # X.Y+1.0
+   npm run release:major    # X+1.0.0
+   # or an exact version:
+   bash scripts/release.sh 1.4.0
    ```
-   git add CHANGELOG.md package.json package-lock.json
-   git commit -m "chore: release vX.Y.Z"
-   ```
-6. Tag the commit:
-   ```
-   git tag -a vX.Y.Z -m "Lekhini vX.Y.Z"
-   ```
-7. Push commit and tag:
-   ```
-   git push origin main
-   git push origin vX.Y.Z
-   ```
-8. Build the installers (signed where applicable):
-   ```
-   npm run build:mac      # produces release/Lekhini-X.Y.Z-arm64.dmg
-   npm run build:win      # produces release/Lekhini Setup X.Y.Z.exe
-   npm run build:linux    # produces release/Lekhini-X.Y.Z.AppImage
-   ```
-9. Create a GitHub Release from the `vX.Y.Z` tag:
-   - Title: `vX.Y.Z`
-   - Body: copy the relevant CHANGELOG section.
-   - Attach the installers from step 8.
+   This (see `scripts/release.sh`):
+   - refuses to run on a dirty tree,
+   - validates with `npm run prebuild` (typecheck + build),
+   - bumps `package.json` + `package-lock.json` (no tag yet),
+   - rolls `CHANGELOG.md`: `[Unreleased]` → a dated `[X.Y.Z]` section and
+     updates the link refs (`scripts/update-changelog.mjs`),
+   - commits `chore(release): vX.Y.Z`, tags `vX.Y.Z`, and pushes both.
+3. The pushed tag triggers **`.github/workflows/release.yml`**, which:
+   - builds installers on macOS, Windows, and Linux in parallel
+     (`npm run release:ci` → `electron-builder --publish always`),
+   - uploads them plus the `latest*.yml` update manifests to a **draft**
+     GitHub Release for the tag,
+   - flips the release **public** once all three OSes succeed.
+4. Watch it at <https://github.com/opensourcebharat/lekhini/actions>.
+   When green, the release is live and installed apps will auto-update.
+
+### macOS signing (optional)
+
+The workflow signs + notarizes macOS builds **only when** these repo
+secrets exist; otherwise the macOS build is unsigned (and macOS
+auto-update stays disabled until they're added — Windows/Linux are
+unaffected): `CSC_LINK`, `CSC_KEY_PASSWORD`, `APPLE_ID`,
+`APPLE_APP_SPECIFIC_PASSWORD`, `APPLE_TEAM_ID`.
+
+### Local build (optional)
+
+To produce installers without releasing, use `npm run build` (current
+OS) or `npm run build:mac|win|linux`. These write to `release/` and do
+**not** publish.
+
+## Auto-update
+
+Installed apps check GitHub Releases via `electron-updater`
+(`src/main/updater.ts`), download in the background, and apply on quit.
+Users control this in **Settings → Updates** (toggle, manual check,
+restart-to-update). Because the feed is GitHub Releases, **every public
+release is automatically an update** for existing installs — so prefer
+small, frequent patch releases in the early stage.
 
 ## Tag naming
 

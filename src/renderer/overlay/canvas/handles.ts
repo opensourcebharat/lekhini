@@ -31,9 +31,14 @@ export function getHandles(item: Item): Handle[] {
       ];
     }
     case 'fib':
+      // Two diagonal (alternate) corners. Each corner carries both an
+      // x and a y, so dragging it resizes the fib's width AND height at
+      // once — and which corner is the swing low vs high follows the
+      // drag direction (top→bottom or bottom→top). This replaces the
+      // old centered handles that could only stretch height.
       return [
-        { id: 'p1', x: (item.p1.x + item.p2.x) / 2, y: item.p1.y },
-        { id: 'p2', x: (item.p1.x + item.p2.x) / 2, y: item.p2.y },
+        { id: 'p1', x: item.p1.x, y: item.p1.y },
+        { id: 'p2', x: item.p2.x, y: item.p2.y },
       ];
     case 'stroke':
     case 'text':
@@ -64,8 +69,9 @@ export function applyHandle(original: Item, hid: HandleId, x: number, y: number)
       return { ...original, p1: { x: nl, y: nt }, p2: { x: nr, y: nb } };
     }
     case 'fib':
-      if (hid === 'p1') return { ...original, p1: { x: original.p1.x, y: y } };
-      if (hid === 'p2') return { ...original, p2: { x: original.p2.x, y: y } };
+      // Corner drag edits both axes: x changes the width, y the height.
+      if (hid === 'p1') return { ...original, p1: { x, y } };
+      if (hid === 'p2') return { ...original, p2: { x, y } };
       return original;
     case 'stroke':
     case 'text':

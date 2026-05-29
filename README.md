@@ -35,6 +35,11 @@ content without switching apps.
   by default with a hotkey to toggle drawing.
 - **Undo/redo, clear, screenshot**, all from the toolbar or global
   hotkeys.
+- **AI, local-first.** Snip anything and **Ask AI** to solve/explain it,
+  autocorrect handwriting and typed text, and analyze trader charts —
+  running on-device via Ollama by default, with optional cloud providers.
+  Everything is opt-in and configured in **Settings → AI**. See
+  [docs/AI.md](./docs/AI.md).
 
 ## Tech stack
 
@@ -48,8 +53,12 @@ content without switching apps.
 - **Zustand** vanilla store with snapshot-based undo/redo history
 - **`electron-store`** for persisted orientation / theme / per-tool
   widths / active tool / color, with schema-tolerant hydration
-- **`electron-builder`** for notarized `.dmg` (and `nsis` /
-  `AppImage` for Windows / Linux)
+- **Local-first AI** — [Ollama](https://ollama.com) for on-device models,
+  with optional cloud providers (Anthropic, OpenAI, Gemini, DeepSeek,
+  Sarvam AI). See [docs/AI.md](./docs/AI.md).
+- **`electron-builder`** for `.dmg` + `.zip` (macOS), `nsis` (Windows),
+  `AppImage` (Linux), and **`electron-updater`** for background
+  auto-updates from GitHub Releases
 
 ## Architecture
 
@@ -154,29 +163,95 @@ After granting, quit and relaunch the app.
 
 Switch profile from **Settings → Profile**. The choice is remembered.
 
+## AI
+
+Lekhini's AI is **local-first and entirely opt-in**. With **Local AI**
+on, snips and text never leave your machine; cloud providers are an
+optional fallback you configure with your own API key. Nothing AI-related
+is enabled until you set one of them up.
+
+**What you can do**
+
+- **Ask AI about a snip** — drag a region, click **Ask AI**, and a chat
+  panel opens. It *solves/answers* what's in the image (math, code,
+  questions, errors), not just describes it. Follow-up questions keep the
+  full conversation context until you start a new snip.
+- **Autocorrect** — typed text and recognized handwriting can be cleaned
+  up automatically (toggle per kind in Settings).
+- **Handwriting recognition** — drawn ink is transcribed to text on
+  device via a vision model.
+- **Trader analysis** — the Trader profile can hand your drawn levels to
+  the AI for a written read.
+- **On-device learning (RAG)** — accepted corrections are remembered
+  locally to personalize future suggestions. Stored only on your machine.
+
+**Providers**
+
+| Provider | Kind | Vision | Notes |
+| --- | --- | --- | --- |
+| **Ollama (Local)** | on-device | yes | Default. Private, free, no key. |
+| **Anthropic Claude** | cloud | yes | API key required |
+| **OpenAI** | cloud | yes | API key required |
+| **Google Gemini** | cloud | yes | API key required |
+| **DeepSeek** | cloud | no (text) | Strong reasoning; image snips answer from text |
+| **Sarvam AI** | cloud | yes (OCR→LLM) | Indic-strong document OCR, then solves |
+
+**Configure** in **Settings → AI**: enable Local AI (a first-run wizard
+installs Ollama + recommended models), or pick a cloud provider and paste
+its key. Routing is local-first — if Local AI is on and a suitable model
+is installed it's used; otherwise the configured cloud provider is.
+
+Full details — architecture, the resolver, per-profile prompts/models,
+privacy, and how each provider is wired — are in
+**[docs/AI.md](./docs/AI.md)**.
+
+## Updates
+
+Installed builds **auto-update from GitHub Releases** via
+`electron-updater`. By default new versions download in the background
+and apply on the next quit/relaunch. Manage this in **Settings →
+Updates**: toggle **Automatic updates**, **Check for updates** on demand,
+or **Restart to update** once a version is downloaded.
+
+> macOS auto-update requires a signed + notarized build. Until signing
+> is configured, macOS users update manually (Settings → Updates links to
+> the latest GitHub Release); Windows and Linux auto-update out of the box.
+
 ## Building installers
 
+Build for the **current OS** (most reliable locally):
+
 ```bash
-# macOS — set these in your shell for signed/notarized builds
+npm run build            # installers for this OS → release/
+npm run build:unpacked   # unpacked app dir, no installer (fastest)
+```
+
+Per-OS targets (cross-OS locally needs the right toolchains — CI is the
+supported path for all three at once):
+
+```bash
+npm run build:mac        # release/Lekhini-<ver>-arm64.dmg (+ x64) + .zip
+npm run build:win        # release/Lekhini Setup <ver>.exe
+npm run build:linux      # release/Lekhini-<ver>.AppImage
+npm run build:all         # attempt mac + win + linux (-mwl)
+```
+
+Optional **macOS signing + notarization** — set these in your shell (or
+as CI secrets) and the build signs automatically; omit them for an
+unsigned build:
+
+```bash
 export APPLE_ID="you@example.com"
 export APPLE_APP_SPECIFIC_PASSWORD="xxxx-xxxx-xxxx-xxxx"
 export APPLE_TEAM_ID="ABCDE12345"
 export CSC_LINK="path/to/DeveloperIDApplication.p12"
 export CSC_KEY_PASSWORD="..."
-
-npm run build:mac       # produces release/Lekhini-1.0.0-arm64.dmg (+ x64)
-npm run build:win       # produces release/Lekhini Setup 1.0.0.exe
-npm run build:linux     # produces release/Lekhini-1.0.0.AppImage
 ```
 
-Unsigned local builds (no notarization):
-
-```bash
-npm run build:unpacked
-```
-
-GitHub Actions on `macos-14` is the recommended CI target — same
-`npm run build` command, with the secrets above set as repo secrets.
+**Automated multi-OS builds + releases** run in CI — pushing a `vX.Y.Z`
+tag builds macOS / Windows / Linux in parallel and publishes them to
+GitHub Releases. See [RELEASING.md](./RELEASING.md); the one-liner is
+`npm run release` (patch) / `release:minor` / `release:major`.
 
 ## Hard constraint: macOS fullscreen Spaces
 

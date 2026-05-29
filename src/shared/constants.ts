@@ -19,21 +19,57 @@ export const HIGHLIGHTER_DEFAULT: ToolSettings = {
 
 export const FIB_LEVELS = [0, 0.236, 0.382, 0.5, 0.618, 0.786, 1.0];
 
+// Per-level colors for the Fibonacci retracement, matching the
+// convention traders are used to on TradingView / MT charts: each
+// ratio reads as a distinct hue so levels are identifiable at a glance
+// without checking the label. 0 and 1 (the swing endpoints) are
+// neutral grey; the inner ratios run warm→cool, with the 0.618 golden
+// ratio in its signature teal. Keyed by the ratio's string form.
+export const FIB_COLORS: Record<string, string> = {
+  '0': '#9598a1', // swing low/high — neutral grey
+  '0.236': '#f23645', // red
+  '0.382': '#ff9800', // orange
+  '0.5': '#4caf50', // green
+  '0.618': '#089981', // golden ratio — teal (the key level)
+  '0.786': '#2962ff', // blue
+  '1': '#9598a1', // full retrace — neutral grey
+};
+
+// Color for a given Fibonacci level, falling back to neutral grey for
+// any custom level not in the standard palette.
+export function fibColor(level: number): string {
+  return FIB_COLORS[String(level)] ?? '#9598a1';
+}
+
 export const SNAP_ANGLES_DEG = [0, 15, 30, 45, 60, 75, 90, 105, 120, 135, 150, 165, 180];
+
+// Default first user message for the auto-fired opening turn of an
+// "Ask AI" snip session. The user hasn't typed anything yet — the image
+// carries the request — so this is phrased to make the model SOLVE or
+// answer whatever is in the image rather than merely describe it. Used
+// by every provider adapter when input.userMessage is empty.
+export const SOLVE_FIRST_TURN =
+  'Solve or answer whatever is shown in this image. If it contains a ' +
+  'problem, question, equation, or task, work it out and give the final ' +
+  'answer with the key steps — do not just describe what you see.';
 
 // Initial sizes for the toolbar window. The renderer reports its
 // actual content size after mount and the window resizes to fit — so
-// these values just need to be a reasonable first-paint estimate
-// close to typical content size, minimizing the brief flicker before
-// dynamic resize lands.
+// these values just need to be a generous first-paint estimate close
+// to typical content size, minimizing flicker before dynamic resize
+// lands. CRITICAL: must be ≥ actual content height including the
+// bottom footer, otherwise the footer is clipped below the visible
+// window edge until the next state change triggers a remeasure.
+// That's what bit users when they restored from the collapsed pill.
 //
-// h.w is sized to fit teacher profile (11 tools) + actions + the
-// inline color grid + right margin. h.h matches the typical bar
-// height when the inline color grid is in place (it's taller than
-// the icons row alone since the grid is 3 rows).
+// Rough budget per orientation (sum to current values with margin):
+//   h: titlebar 28 + tools row 56 + footer 28 + borders 2 = ~114
+//      → 140 leaves slack for taller tool rows
+//   v: v-controls 32 + v-brand 52 + tools ~280 + pinned ~96 +
+//      footer 52 + borders 2 = ~514 → 560 with slack
 export const TOOLBAR_SIZES = {
-  h: { w: 740, h: 102 },
-  v: { w: 88, h: 480 },
+  h: { w: 740, h: 140 },
+  v: { w: 88, h: 560 },
 };
 
 // Extra space added when the settings dropdown is open.
