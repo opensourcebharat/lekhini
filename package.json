@@ -1,7 +1,7 @@
 {
   "name": "@opensourcebharat/lekhini",
   "productName": "Lekhini",
-  "version": "1.1.0",
+  "version": "1.1.1",
   "description": "Lekhini — an open-source on-screen annotation overlay (pencil, pen, highlighter, eraser, shapes) for macOS / Windows / Linux. MIT licensed. Made in India · 2026. A project of opensourcebharat.org.",
   "license": "MIT",
   "homepage": "https://opensourcebharat.org",

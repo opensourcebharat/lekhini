@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.1.1] — 2026-07-08
+
 ### Fixed
 - **Linux/Wayland capture** — screenshots on multi-monitor Wayland could
   grab the wrong display (`display_id` is empty under the PipeWire
@@ -110,6 +112,7 @@ Made in India.
 - macOS (signed/notarized .dmg via electron-builder).
 - Windows and Linux build targets are wired but unsigned.
 
-[Unreleased]: https://github.com/opensourcebharat/lekhini/compare/v1.1.0...HEAD
+[Unreleased]: https://github.com/opensourcebharat/lekhini/compare/v1.1.1...HEAD
+[1.1.1]: https://github.com/opensourcebharat/lekhini/compare/v1.1.0...v1.1.1
 [1.1.0]: https://github.com/opensourcebharat/lekhini/compare/v1.0.0...v1.1.0
 [1.0.0]: https://github.com/opensourcebharat/lekhini/releases/tag/v1.0.0
