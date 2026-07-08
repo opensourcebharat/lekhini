@@ -254,13 +254,12 @@ export function OverlayApp() {
         // cancel any pending recognition so it never fires mid-word and
         // overwrites half-finished ink.
         cancelRecognition();
-        // The user is starting an actual stroke — close any thickness
-        // popup that was left open on the toolbar so it doesn't hover
-        // over the drawing surface. Cheap; only fires when the popup
-        // is actually open.
+        // The user is starting an actual stroke — close any flyout
+        // card left open on the toolbar so it doesn't hover over the
+        // drawing surface. Cheap; only fires when one is actually open.
         if (toolbarFlyoutOpen) {
           toolbarFlyoutOpen = false;
-          void window.pen.hub.update({ thicknessFlyoutOpen: false });
+          void window.pen.hub.update({ flyout: null });
         }
         currentTool.onDown(s, ctx);
       },
@@ -365,7 +364,7 @@ export function OverlayApp() {
         settings?: Partial<ToolSettings>;
         whiteboard?: Whiteboard;
         theme?: Theme;
-        thicknessFlyoutOpen?: boolean;
+        flyout?: string | null;
         profile?: ProfileId;
         calibration?: Calibration | null;
       } & AiHubFields;
@@ -378,8 +377,8 @@ export function OverlayApp() {
         currentTheme = s.theme;
         applyCursor();
       }
-      if (typeof s.thicknessFlyoutOpen === 'boolean') {
-        toolbarFlyoutOpen = s.thicknessFlyoutOpen;
+      if ('flyout' in s) {
+        toolbarFlyoutOpen = s.flyout != null;
       }
       applyAiFields(s);
       if (s.profile) setActiveProfile(s.profile);
@@ -392,7 +391,7 @@ export function OverlayApp() {
         settings: ToolSettings;
         whiteboard: Whiteboard;
         theme?: Theme;
-        thicknessFlyoutOpen?: boolean;
+        flyout?: string | null;
         profile?: ProfileId;
         calibration?: Calibration | null;
       } & AiHubFields;
@@ -402,8 +401,8 @@ export function OverlayApp() {
       store.getState().setSettings(s.settings);
       setWhiteboard(s.whiteboard);
       if (s.theme) currentTheme = s.theme;
-      if (typeof s.thicknessFlyoutOpen === 'boolean') {
-        toolbarFlyoutOpen = s.thicknessFlyoutOpen;
+      if ('flyout' in s) {
+        toolbarFlyoutOpen = s.flyout != null;
       }
       applyAiFields(s);
       if (s.profile) setActiveProfile(s.profile);

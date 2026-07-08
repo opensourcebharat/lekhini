@@ -9,12 +9,15 @@ import {
   Show,
   Switch,
 } from 'solid-js';
-import { COLOR_PRESETS, THICKNESS_PRESETS } from '../../shared/constants';
+import { PINNED_COLORS } from '../../shared/constants';
 import { PROFILES, PROFILE_ORDER, resolveAiPrompt } from '../../shared/profiles';
+import { groupOf, groupToolsForProfile, GROUP_IDS } from '../../shared/toolGroups';
 import type {
   AiStatus,
   ChatSessionPayload,
   ConnectionTestResult,
+  FlyoutId,
+  GroupId,
   LocalModelInfo,
   OllamaPullProgress,
   OllamaServiceStatus,
@@ -29,6 +32,10 @@ import type {
 } from '../../shared/types';
 import { Icons, Logo } from './icons';
 import { ChatPanel } from './ChatPanel';
+import { ToolButton } from './ToolButton';
+import { GroupButton } from './GroupButton';
+import { FlyoutCard } from './FlyoutCard';
+import { ColorFlyout } from './ColorFlyout';
 
 // The cloud providers (kept as an opt-in fallback). Local (Ollama)
 // has its own settings section, so these mirror maps are cloud-only.
@@ -107,7 +114,8 @@ interface HubSnapshot {
   theme: Theme;
   profile: ProfileId;
   settingsOpen: boolean;
-  thicknessFlyoutOpen: boolean;
+  flyout: FlyoutId | null;
+  groupLastTool: Partial<Record<GroupId, ToolId>>;
   perToolWidth: { pencil: number; pen: number; eraser: number; highlighter: number };
   saveDir: string | null;
   alwaysAskSavePath: boolean;
@@ -137,10 +145,6 @@ const TEXT_FONTS: { label: string; value: string }[] = [
   { label: 'Mono', value: "Menlo, Consolas, 'Courier New', monospace" },
   { label: 'Rounded', value: "'SF Pro Rounded', 'Segoe UI', system-ui, sans-serif" },
 ];
-
-type FlyoutTool = 'pencil' | 'pen' | 'eraser' | 'highlighter';
-const FLYOUT_TOOLS = new Set<ToolId>(['pencil', 'pen', 'eraser', 'highlighter']);
-const isFlyoutTool = (id: ToolId): id is FlyoutTool => FLYOUT_TOOLS.has(id);
 
 interface ToolDef {
   id: ToolId;
@@ -172,6 +176,16 @@ const TOOL_BY_ID: Record<ToolId, ToolDef> = ALL_TOOLS.reduce(
   },
   {} as Record<ToolId, ToolDef>,
 );
+
+// One rendered slot in the tools column: either a plain tool button or
+// a group button (draw / shapes) carrying its profile-filtered members.
+type ToolSlot =
+  | { kind: 'tool'; tool: ToolId }
+  | { kind: 'group'; group: GroupId; tools: ToolId[] };
+
+// Canonical top-level order — groups fold their members in place.
+const SLOT_ORDER: (ToolId | GroupId)[] = ['draw', 'eraser', 'hand', 'shapes', 'text', 'snip'];
+const GROUP_LABELS: Record<GroupId, string> = { draw: 'Drawing tools', shapes: 'Shapes' };
 
 // Permission-panel hint copy. When probeError=true, desktopCapturer
 // outright threw on the recheck attempt — the process can't pick the
@@ -218,7 +232,8 @@ export function ToolbarApp() {
     theme: 'dark',
     profile: 'general',
     settingsOpen: false,
-    thicknessFlyoutOpen: false,
+    flyout: null,
+    groupLastTool: {},
     perToolWidth: { pencil: 3, pen: 4, eraser: 20, highlighter: 18 },
     saveDir: null,
     alwaysAskSavePath: false,
@@ -552,22 +567,25 @@ export function ToolbarApp() {
     el.addEventListener('pointermove', onMove);
     el.addEventListener('pointerup', onUp);
 
-    // Close the thickness flyout on Esc or any click outside its chips/buttons.
+    // Close any open flyout on Esc, click-outside, or window blur.
     const onKey = (e: KeyboardEvent) => {
-      if (e.key === 'Escape' && hub().thicknessFlyoutOpen) closeFlyout();
+      if (e.key === 'Escape' && hub().flyout !== null) closeFlyout();
     };
     const onDocDown = (e: PointerEvent) => {
-      if (!hub().thicknessFlyoutOpen) return;
+      if (hub().flyout === null) return;
       const t = e.target as HTMLElement | null;
       if (!t) return;
-      // Don't dismiss when the click landed on the popup, the thickness
-      // trigger button, or any tool button (tool change closes the popup
-      // on its own anyway).
-      if (t.closest('.thickness-popup, .thickness-trigger, .tool-btn')) return;
+      // Keep the card open when the press lands inside it or on its
+      // anchor (group button / color dot) — those toggle it themselves.
+      if (t.closest('.flyout-card, .group-btn, .color-dot')) return;
       closeFlyout();
+    };
+    const onWinBlur = () => {
+      if (hub().flyout !== null) closeFlyout();
     };
     window.addEventListener('keydown', onKey);
     window.addEventListener('pointerdown', onDocDown, true);
+    window.addEventListener('blur', onWinBlur);
 
     onCleanup(() => {
       el.removeEventListener('pointerdown', onDown);
@@ -575,6 +593,7 @@ export function ToolbarApp() {
       el.removeEventListener('pointerup', onUp);
       window.removeEventListener('keydown', onKey);
       window.removeEventListener('pointerdown', onDocDown, true);
+      window.removeEventListener('blur', onWinBlur);
     });
   });
 
@@ -584,24 +603,47 @@ export function ToolbarApp() {
   // include it too — stacked vertically in h-mode (column flex bar),
   // side-by-side in v-mode (row flex bar, so we take the taller side).
   let lastReported = 0;
+  let lastReportedW = 0;
   const reportContentSize = () => {
     if (!barMainRef) return;
     const s = hub();
     if (s.minimized) return;
 
+    // Natural content size of bar-main. The scroll-area's client box
+    // tracks whatever the window currently allots, so use scrollWidth /
+    // scrollHeight for it and offset sizes for everything else — both
+    // for .bar-row's children (strip, brand, scroll-area, bar-end) and
+    // for bar-main's other children (the save toast).
+    const row = barMainRef.querySelector('.bar-row') as HTMLElement | null;
     let barMainHeight = 0;
+    let barMainWidth = 0;
+    if (row) {
+      if (s.orientation === 'v') {
+        for (const child of Array.from(row.children)) {
+          const el = child as HTMLElement;
+          barMainHeight += el.classList.contains('scroll-area')
+            ? el.scrollHeight
+            : el.offsetHeight;
+        }
+      } else {
+        barMainHeight = row.offsetHeight;
+        for (const child of Array.from(row.children)) {
+          const el = child as HTMLElement;
+          barMainWidth += el.classList.contains('scroll-area')
+            ? el.scrollWidth
+            : el.offsetWidth;
+        }
+      }
+    }
     for (const child of Array.from(barMainRef.children)) {
       const el = child as HTMLElement;
-      const isScroll = el.classList.contains('scroll-area');
-      // scroll-area's clientHeight can track the window allotment, so
-      // use scrollHeight to get the natural content height.
-      barMainHeight += isScroll ? el.scrollHeight : el.offsetHeight;
+      if (el !== row) barMainHeight += el.offsetHeight;
     }
 
     let target = barMainHeight;
-    // Settings panel and status panel both render with class
+    // Settings, status, and chat panels all render with class
     // .settings-panel; whichever is open occupies the dock slot.
-    if (s.settingsOpen || s.statusPanelOpen) {
+    if (s.settingsOpen || s.statusPanelOpen || s.chatOpen) {
       const sidePanel = barMainRef.parentElement?.querySelector(
         '.settings-panel',
       ) as HTMLElement | null;
@@ -613,11 +655,30 @@ export function ToolbarApp() {
             : Math.max(barMainHeight, sideHeight);
       }
     }
-    // 2px for the bar's 1px border on each side.
+    // h-mode: an open flyout card floats below the bar — include it.
+    if (s.orientation === 'h' && s.flyout !== null) {
+      const card = barMainRef.parentElement?.querySelector(
+        '.flyout-card',
+      ) as HTMLElement | null;
+      if (card) target = Math.max(target, barMainHeight + 8 + card.offsetHeight + 8);
+    }
+    // 2px for the bar-main border.
     target += 2;
-    if (target === lastReported || target < 60) return;
-    lastReported = target;
-    void window.pen.win.setContentSize({ axis: 'v', size: target });
+    if (target !== lastReported && target >= 60) {
+      lastReported = target;
+      void window.pen.win.setContentSize({ axis: 'v', size: target });
+    }
+    // h-mode: the bar also hugs its content WIDTH (it varies by
+    // profile now that tools are grouped). Computed from the row's
+    // children above so a shrunken scroll-area doesn't lock the
+    // measurement to the current window width.
+    if (s.orientation === 'h' && barMainWidth > 0) {
+      const w = barMainWidth + 2;
+      if (w !== lastReportedW && w >= 60) {
+        lastReportedW = w;
+        void window.pen.win.setContentSize({ axis: 'h', size: w });
+      }
+    }
   };
 
   // Re-measure after the DOM has settled following any state change that
@@ -630,7 +691,7 @@ export function ToolbarApp() {
     void s.settingsOpen;
     void s.statusPanelOpen;
     void s.chatOpen;
-    void s.thicknessFlyoutOpen;
+    void s.flyout;
     void s.profile;
     void s.activeTool;
     void panelKind();
@@ -668,34 +729,35 @@ export function ToolbarApp() {
   const refreshSide = () => {
     void window.pen.win.toolbarOnRightSide().then(setSettingsOnLeft);
   };
-  const closeFlyout = () =>
-    void window.pen.hub.update({ thicknessFlyoutOpen: false });
+  const closeFlyout = () => void window.pen.hub.update({ flyout: null });
+  // Anchor elements for each flyout, captured at open time so the card
+  // can position itself next to the button that spawned it.
+  const anchorEls: Partial<Record<FlyoutId, HTMLElement>> = {};
+  const [flyoutAnchor, setFlyoutAnchor] = createSignal<DOMRect | null>(null);
+  const openFlyout = (id: FlyoutId) => {
+    const el = anchorEls[id];
+    setFlyoutAnchor(el ? el.getBoundingClientRect() : null);
+    refreshSide();
+    void window.pen.hub.update({ flyout: id });
+  };
+  const toggleFlyout = (id: FlyoutId) => {
+    if (hub().flyout === id) closeFlyout();
+    else openFlyout(id);
+  };
   const setTool = (id: ToolId) => {
     const s = hub();
     if (s.activeTool === id) {
-      // Re-clicking the active tool toggles drawMode — gives the user
-      // a fast way back to idle without hunting for the status dot.
-      // Thickness selection is no longer tied to tool clicks; it lives
-      // in its own button.
-      void window.pen.hub.update({
-        drawMode: !s.drawMode,
-        thicknessFlyoutOpen: false,
-      });
+      // Re-clicking the active tool toggles drawMode — a fast way back
+      // to idle without hunting for the eye button.
+      void window.pen.hub.update({ drawMode: !s.drawMode, flyout: null });
     } else {
-      void window.pen.hub.update({
-        activeTool: id,
-        drawMode: true,
-        thicknessFlyoutOpen: false,
-      });
+      // hub.patch closes any open tool-group flyout on a tool change.
+      void window.pen.hub.update({ activeTool: id, drawMode: true });
     }
   };
   const setColor = (c: string) => void window.pen.hub.update({ settings: { color: c } });
   const pickThickness = (n: number) =>
     void window.pen.hub.update({ settings: { width: n } });
-  const toggleThickness = () => {
-    if (!isFlyoutTool(hub().activeTool)) return;
-    void window.pen.hub.update({ thicknessFlyoutOpen: !hub().thicknessFlyoutOpen });
-  };
   const toggleDraw = () => void window.pen.hub.update({ drawMode: !hub().drawMode });
   const toggleOrient = () =>
     void window.pen.hub.update({ orientation: hub().orientation === 'h' ? 'v' : 'h' });
@@ -878,7 +940,7 @@ export function ToolbarApp() {
   // existing layout rules (flex-direction switch in v-mode, etc.)
   // apply uniformly whether settings or a status panel is open.
   const sidePanelOpen = createMemo(() =>
-    hub().settingsOpen || panelKind() !== null || hub().chatOpen,
+    hub().settingsOpen || panelKind() !== null || hub().chatOpen || hub().flyout !== null,
   );
 
   // Any AI path usable: a cloud provider configured, OR Local AI on with
@@ -890,28 +952,40 @@ export function ToolbarApp() {
       (hub().aiLocalEnabled && hub().aiInstalledModels.length > 0),
   );
 
-  const showHint = (text: string) => setHint(text);
-  const clearHint = () => setHint('');
   const isMac = createMemo(() => platform() === 'darwin');
   // Keyboard-shortcut labels: mac glyphs on macOS, spelled-out keys
   // elsewhere (⌘/⇧ mean nothing on Windows/Linux and the accelerators
   // there are actually Ctrl-based).
   const kbd = (mac: string, other: string) => (isMac() ? mac : other);
   const toolHint = (hint: string) => (isMac() ? hint : hint.replace('⇧', 'Shift'));
-  const isVert = createMemo(() => hub().orientation === 'v');
-  const profileTools = createMemo(() => {
-    const allowed = new Set(PROFILES[hub().profile].tools);
-    return ALL_TOOLS.filter((t) => allowed.has(t.id));
+  // Top-level tool slots: groups fold their (profile-filtered) members
+  // behind one button; ungrouped tools render plain. A group with a
+  // single member renders as that plain tool; an empty group is hidden.
+  const toolSlots = createMemo<ToolSlot[]>(() => {
+    const profile = hub().profile;
+    const allowed = new Set(PROFILES[profile].tools);
+    const slots: ToolSlot[] = [];
+    for (const entry of SLOT_ORDER) {
+      if ((GROUP_IDS as string[]).includes(entry)) {
+        const gid = entry as GroupId;
+        const members = groupToolsForProfile(gid, profile);
+        if (members.length === 1) slots.push({ kind: 'tool', tool: members[0] });
+        else if (members.length > 1) slots.push({ kind: 'group', group: gid, tools: members });
+      } else if (allowed.has(entry as ToolId)) {
+        slots.push({ kind: 'tool', tool: entry as ToolId });
+      }
+    }
+    return slots;
   });
-  // Hint line for the footer. Hover-hint takes priority; otherwise we
-  // show the active tool's name so the footer is never empty in
-  // either orientation. brandLine / vertHintLine retained for any
-  // future use but the footer is the new home for hover text.
-  const footerHintLine = (): string => {
-    if (hint()) return hint();
-    const active = TOOL_BY_ID[hub().activeTool];
-    if (active) return active.label;
-    return hub().drawMode ? 'Drawing' : 'Idle';
+  // The tool a group button displays: the active tool when it belongs
+  // to the group, else the remembered last-used pick, else the first
+  // member (covers profile switches that exclude the remembered tool).
+  const shownGroupTool = (group: GroupId, tools: ToolId[]): ToolId => {
+    const active = hub().activeTool;
+    if (groupOf(active) === group && tools.includes(active)) return active;
+    const last = hub().groupLastTool[group];
+    if (last && tools.includes(last)) return last;
+    return tools[0];
   };
 
   return (
@@ -941,354 +1015,188 @@ export function ToolbarApp() {
         }
       >
         <div class="bar-main" ref={barMainRef}>
-          {/* ─── HORIZONTAL TITLE BAR ─── */}
-          <Show when={!isVert()}>
-            <div class="titlebar h-titlebar">
-              <div class="tb-side tb-left">
-                <Show when={isMac()}>
-                  <div class="mac-traffic">
-                    <button
-                      class="mac-light close"
-                      onClick={closeApp}
-                      onMouseEnter={() => showHint('Quit')}
-                      onMouseLeave={clearHint}
-                      aria-label="Quit Lekhini"
-                    ><span>×</span></button>
-                    <button
-                      class="mac-light min"
-                      onClick={minimize}
-                      onMouseEnter={() => showHint('Minimize')}
-                      onMouseLeave={clearHint}
-                      aria-label="Minimize toolbar"
-                    ><span>−</span></button>
-                  </div>
-                </Show>
-              </div>
-
-              <div class="tb-center">
-                <span class="logo big">{Logo()}</span>
-              </div>
-
-              <div class="tb-side tb-right">
-                <button
-                  class="winctl"
-                  onClick={minimize}
-                  onMouseEnter={() => showHint('Collapse toolbar')}
-                  onMouseLeave={clearHint}
-                  title="Collapse"
-                >{Icons.collapse()}</button>
-                <Show when={!isMac()}>
-                  <button
-                    class="winctl"
-                    onClick={minimize}
-                    onMouseEnter={() => showHint('Minimize')}
-                    onMouseLeave={clearHint}
-                    aria-label="Minimize toolbar"
-                  >{Icons.minus()}</button>
-                  <button
-                    class="winctl danger"
-                    onClick={closeApp}
-                    onMouseEnter={() => showHint('Quit')}
-                    onMouseLeave={clearHint}
-                    aria-label="Quit Lekhini"
-                  >{Icons.close()}</button>
-                </Show>
-              </div>
-            </div>
-          </Show>
-
-          {/* ─── VERTICAL TOP STACK ─── */}
-          <Show when={isVert()}>
-            <div class="v-controls">
+          <div class="bar-row">
+            {/* ─── MICRO-STRIP: window controls; primary drag region ─── */}
+            <div class="strip">
               <Show when={isMac()}>
-                <div class="mac-traffic v-traffic">
+                <div class="mac-traffic">
                   <button
                     class="mac-light close"
                     onClick={closeApp}
-                    onMouseEnter={() => showHint('Quit')}
-                    onMouseLeave={clearHint}
+                    title="Quit Lekhini"
                     aria-label="Quit Lekhini"
                   ><span>×</span></button>
                   <button
                     class="mac-light min"
                     onClick={minimize}
-                    onMouseEnter={() => showHint('Minimize')}
-                    onMouseLeave={clearHint}
-                    aria-label="Minimize toolbar"
+                    title="Collapse toolbar"
+                    aria-label="Collapse toolbar"
                   ><span>−</span></button>
                 </div>
               </Show>
               <Show when={!isMac()}>
-                <div class="v-winctls">
-                  <button
-                    class="winctl"
-                    onClick={minimize}
-                    onMouseEnter={() => showHint('Minimize')}
-                    onMouseLeave={clearHint}
-                    aria-label="Minimize toolbar"
-                  >{Icons.minus()}</button>
+                <div class="winctls">
                   <button
                     class="winctl danger"
                     onClick={closeApp}
-                    onMouseEnter={() => showHint('Quit')}
-                    onMouseLeave={clearHint}
+                    title="Quit Lekhini"
                     aria-label="Quit Lekhini"
                   >{Icons.close()}</button>
+                  <button
+                    class="winctl"
+                    onClick={minimize}
+                    title="Collapse toolbar"
+                    aria-label="Collapse toolbar"
+                  >{Icons.minus()}</button>
                 </div>
               </Show>
-              <button
-                class="winctl v-collapse"
-                onClick={minimize}
-                onMouseEnter={() => showHint('Collapse toolbar')}
-                onMouseLeave={clearHint}
-                title="Collapse"
-              >{Icons.collapse()}</button>
-            </div>
-            <div class="v-brand">
-              <span class="logo big">{Logo()}</span>
-            </div>
-          </Show>
-
-          {/* ─── SCROLLABLE TOOLS + ACTIONS ─── */}
-          <div class="scroll-area" ref={scrollRef}>
-            <div class="tools-zone">
-              <For each={profileTools()}>
-                {(t) => (
-                  <button
-                    class={`tool-btn ${hub().activeTool === t.id ? 'active' : ''}`}
-                    onClick={() => setTool(t.id)}
-                    onMouseEnter={() => showHint(`${t.label} · ${toolHint(t.hint)}`)}
-                    onMouseLeave={clearHint}
-                    aria-label={t.label}
-                  >{t.icon()}</button>
-                )}
-              </For>
             </div>
 
-            <div class="zone-sep" />
-
-            <div class="actions-zone">
-              <button
-                class="action-btn"
-                onClick={() => window.pen.relay.undo()}
-                onMouseEnter={() => showHint(`Undo · ${kbd('⌘Z', 'Ctrl+Z')}`)}
-                onMouseLeave={clearHint}
-                aria-label="Undo"
-              >{Icons.undo()}</button>
-              <button
-                class="action-btn"
-                onClick={() => window.pen.relay.redo()}
-                onMouseEnter={() => showHint(`Redo · ${kbd('⌘⇧Z', 'Ctrl+Shift+Z')}`)}
-                onMouseLeave={clearHint}
-                aria-label="Redo"
-              >{Icons.redo()}</button>
-              <button
-                class="action-btn"
-                onClick={() => window.pen.relay.clear()}
-                onMouseEnter={() => showHint(`Clear · ${kbd('⌘⇧C', 'Ctrl+Shift+C')}`)}
-                onMouseLeave={clearHint}
-                aria-label="Clear all annotations"
-              >{Icons.clear()}</button>
-              <button
-                class="action-btn"
-                onClick={() => window.pen.relay.screenshot()}
-                onMouseEnter={() => showHint(`Screenshot · ${kbd('⌘⇧S', 'Ctrl+Shift+S')}`)}
-                onMouseLeave={clearHint}
-                aria-label="Save screenshot"
-              >{Icons.camera()}</button>
-              <Show when={hub().profile === 'trader' && aiReady()}>
-                <button
-                  class="action-btn"
-                  onClick={() => window.pen.relay.analyze()}
-                  onMouseEnter={() => showHint('Analyze drawn levels with AI')}
-                  onMouseLeave={clearHint}
-                  title="Analyze chart (AI)"
-                  aria-label="Analyze chart"
-                >{Icons.fib()}</button>
-              </Show>
-              <button
-                class={`action-btn ${hub().whiteboard !== 'off' ? 'tinted' : ''}`}
-                onClick={cycleBoard}
-                onMouseEnter={() =>
-                  showHint(
-                    `Board: ${hub().whiteboard === 'off' ? 'Off' : hub().whiteboard === 'white' ? 'White' : 'Black'}`,
-                  )
-                }
-                onMouseLeave={clearHint}
-                aria-label="Cycle whiteboard background"
-              >{Icons.whiteboard()}</button>
-              <button
-                class={`action-btn thickness-trigger ${hub().thicknessFlyoutOpen ? 'tinted' : ''}`}
-                onClick={toggleThickness}
-                disabled={!isFlyoutTool(hub().activeTool)}
-                onMouseEnter={() =>
-                  showHint(
-                    isFlyoutTool(hub().activeTool)
-                      ? `Thickness · ${hub().settings.width}px`
-                      : 'Thickness — pick pencil/pen/eraser/highlighter first',
-                  )
-                }
-                onMouseLeave={clearHint}
-                title="Thickness"
-                aria-label="Thickness"
-              >{Icons.thickness()}</button>
+            {/* ─── BRAND: logo doubles as a drag handle ─── */}
+            <div class="brand">
+              <span class="logo">{Logo()}</span>
             </div>
 
-            {/* Horizontal: color grid sits right after the thickness
-                icon, pushed to the right via margin-left:auto with
-                breathing room from the toolbar's right edge. */}
-            <Show when={!isVert()}>
-              <div class="color-grid">
-                <For each={COLOR_PRESETS}>
-                  {(c) => (
-                    <button
-                      type="button"
-                      class={`swatch ${
-                        hub().settings.color.toLowerCase() === c.toLowerCase() ? 'active' : ''
-                      }`}
-                      style={{ background: c }}
-                      onClick={() => setColor(c)}
-                      onMouseEnter={() => showHint(c.toUpperCase())}
-                      onMouseLeave={clearHint}
-                      aria-label={`Color ${c.toUpperCase()}`}
-                    />
-                  )}
+            {/* ─── TOOLS · ACTIONS · COLOR ─── */}
+            <div class="scroll-area" ref={scrollRef}>
+              {/* Eye — master draw-mode toggle (Epic Pen style). */}
+              <ToolButton
+                class="eye-btn"
+                active={hub().drawMode}
+                title={hub().drawMode ? 'Drawing — click to pause' : 'Idle — click to draw'}
+                label={hub().drawMode ? 'Pause drawing' : 'Start drawing'}
+                onClick={toggleDraw}
+              >
+                {hub().drawMode ? Icons.eye() : Icons.eyeOff()}
+              </ToolButton>
+
+              <div class="tools-zone">
+                <For each={toolSlots()}>
+                  {(slot) => {
+                    if (slot.kind === 'tool') {
+                      const t = TOOL_BY_ID[slot.tool];
+                      return (
+                        <ToolButton
+                          active={hub().activeTool === t.id}
+                          title={`${t.label} · ${toolHint(t.hint)}`}
+                          label={t.label}
+                          onClick={() => setTool(t.id)}
+                        >{t.icon()}</ToolButton>
+                      );
+                    }
+                    const g = slot.group;
+                    return (
+                      <GroupButton
+                        ref={(el) => (anchorEls[g] = el)}
+                        active={groupOf(hub().activeTool) === g}
+                        open={hub().flyout === g}
+                        title={`${TOOL_BY_ID[shownGroupTool(g, slot.tools)].label} · hold or re-click for more`}
+                        label={GROUP_LABELS[g]}
+                        onSelect={() => setTool(shownGroupTool(g, slot.tools))}
+                        onOpenFlyout={() => toggleFlyout(g)}
+                      >{TOOL_BY_ID[shownGroupTool(g, slot.tools)].icon()}</GroupButton>
+                    );
+                  }}
                 </For>
-                <label
-                  class="hex-pick"
-                  onMouseEnter={() => showHint('Custom color')}
-                  onMouseLeave={clearHint}
-                >
-                  <input
-                    type="color"
-                    value={hub().settings.color}
-                    onInput={(e) => setColor((e.currentTarget as HTMLInputElement).value)}
-                  />
-                  <span class="hex-glyph">+</span>
-                </label>
               </div>
-            </Show>
 
-          </div>
+              <div class="zone-sep" />
 
-          {/* ── THICKNESS POPUP ──
-               Rendered as a sibling between scroll-area and pinned so
-               it gets its own row instead of competing for inline
-               space with the color grid (h-mode) or the actions row
-               (v-mode). The bar window auto-grows to accommodate. */}
-          <Show when={hub().thicknessFlyoutOpen && isFlyoutTool(hub().activeTool)}>
-            {(() => {
-              const tool = hub().activeTool as FlyoutTool;
-              const presets = THICKNESS_PRESETS[tool].slice(0, 4);
-              return (
-                <div class="thickness-popup" data-tool={tool}>
-                  <For each={presets}>
-                    {(w) => (
+              <div class="actions-zone">
+                <ToolButton
+                  title={`Undo · ${kbd('⌘Z', 'Ctrl+Z')}`}
+                  label="Undo"
+                  onClick={() => window.pen.relay.undo()}
+                >{Icons.undo()}</ToolButton>
+                <ToolButton
+                  title={`Redo · ${kbd('⌘⇧Z', 'Ctrl+Shift+Z')}`}
+                  label="Redo"
+                  onClick={() => window.pen.relay.redo()}
+                >{Icons.redo()}</ToolButton>
+                <ToolButton
+                  title={`Clear all · ${kbd('⌘⇧C', 'Ctrl+Shift+C')}`}
+                  label="Clear all annotations"
+                  onClick={() => window.pen.relay.clear()}
+                >{Icons.clear()}</ToolButton>
+                <ToolButton
+                  active={hub().whiteboard !== 'off'}
+                  title={`Board: ${hub().whiteboard === 'off' ? 'Off' : hub().whiteboard === 'white' ? 'White' : 'Black'}`}
+                  label="Cycle whiteboard background"
+                  onClick={cycleBoard}
+                >{Icons.whiteboard()}</ToolButton>
+                <ToolButton
+                  title={`Screenshot · ${kbd('⌘⇧S', 'Ctrl+Shift+S')}`}
+                  label="Save screenshot"
+                  onClick={() => window.pen.relay.screenshot()}
+                >{Icons.camera()}</ToolButton>
+                <Show when={hub().profile === 'trader' && aiReady()}>
+                  <ToolButton
+                    title="Analyze drawn levels with AI"
+                    label="Analyze chart"
+                    onClick={() => window.pen.relay.analyze()}
+                  >{Icons.fib()}</ToolButton>
+                </Show>
+              </div>
+
+              <div class="zone-sep" />
+
+              {/* ─── COLOR CLUSTER: current-color dot + quick swatches ─── */}
+              <div class="color-cluster">
+                <button
+                  ref={(el) => (anchorEls.color = el)}
+                  class={`color-dot ${hub().flyout === 'color' ? 'open' : ''}`}
+                  onClick={() => toggleFlyout('color')}
+                  title="Color & thickness"
+                  aria-label="Color and thickness"
+                  aria-haspopup="menu"
+                  aria-expanded={hub().flyout === 'color'}
+                >
+                  <span class="color-dot-fill" style={{ background: hub().settings.color }} />
+                  <span class="group-corner" aria-hidden="true" />
+                </button>
+                <div class="pinned-swatches">
+                  <For each={PINNED_COLORS}>
+                    {(c) => (
                       <button
-                        class={`thickness-chip ${hub().settings.width === w ? 'active' : ''}`}
-                        onClick={() => pickThickness(w)}
-                        onMouseEnter={() => showHint(`${w}px`)}
-                        onMouseLeave={clearHint}
-                        title={`${w}px`}
-                        aria-label={`${w} pixels`}
-                      >
-                        <span
-                          class="thickness-chip-dot"
-                          style={{
-                            width: `${Math.min(w, isVert() ? 14 : 22)}px`,
-                            height: `${Math.min(w, isVert() ? 14 : 22)}px`,
-                            background:
-                              tool === 'eraser' || tool === 'pencil'
-                                ? 'var(--text)'
-                                : hub().settings.color,
-                            opacity: tool === 'highlighter' ? 0.55 : 1,
-                          }}
-                        />
-                      </button>
+                        type="button"
+                        class={`swatch mini-swatch ${
+                          hub().settings.color.toLowerCase() === c.toLowerCase() ? 'active' : ''
+                        }`}
+                        style={{ background: c }}
+                        onClick={() => setColor(c)}
+                        title={c.toUpperCase()}
+                        aria-label={`Color ${c.toUpperCase()}`}
+                      />
                     )}
                   </For>
                 </div>
-              );
-            })()}
-          </Show>
-
-          {/* ─── PINNED BOTTOM ─── swatches live here in v-mode only.
-               In h-mode pinned is empty and hidden via :empty so it
-               doesn't add a stray bottom padding band. */}
-          <div class="pinned">
-            <Show when={isVert()}>
-              <div class="swatches">
-                <For each={COLOR_PRESETS}>
-                  {(c) => (
-                    <button
-                      type="button"
-                      class={`swatch ${
-                        hub().settings.color.toLowerCase() === c.toLowerCase() ? 'active' : ''
-                      }`}
-                      style={{ background: c }}
-                      onClick={() => setColor(c)}
-                      onMouseEnter={() => showHint(c.toUpperCase())}
-                      onMouseLeave={clearHint}
-                      aria-label={`Color ${c.toUpperCase()}`}
-                    />
-                  )}
-                </For>
-                <label
-                  class="hex-pick"
-                  onMouseEnter={() => showHint('Custom color')}
-                  onMouseLeave={clearHint}
-                >
-                  <input
-                    type="color"
-                    value={hub().settings.color}
-                    onInput={(e) => setColor((e.currentTarget as HTMLInputElement).value)}
-                  />
-                  <span class="hex-glyph">+</span>
-                </label>
               </div>
-            </Show>
+            </div>
+
+            {/* ─── SETTINGS ─── quiet gear pinned at the end. */}
+            <div class="bar-end">
+              <button
+                class={`winctl footer-settings ${hub().settingsOpen ? 'tinted' : ''}`}
+                onClick={toggleSettings}
+                title="Settings"
+                aria-label="Settings"
+              >{Icons.gear()}</button>
+            </div>
           </div>
 
-          {/* ─── FOOTER ─── hover-hint on the left, plus the
-               rarely-touched status-dot + settings on the right. Lives
-               at the bottom of bar-main so it doesn't take attention
-               away from the tools. The hint area is also where the
-               'Saved · …/lekhini-…png' reveal link surfaces. */}
-          <div class="bar-footer">
-            <div
-              class={`bar-footer-hint ${hint() ? 'has-hint' : ''} ${revealPath() ? 'is-reveal' : ''}`}
+          {/* ─── SAVE TOAST ─── transient "Saved · path" pill (4s). */}
+          <Show when={hint()}>
+            <button
+              class={`toast ${revealPath() ? 'is-reveal' : ''}`}
               onClick={() => {
                 const p = revealPath();
                 if (p) void window.pen.shell.openPath(p);
               }}
-              title={revealPath() ? 'Click to reveal in folder' : footerHintLine()}
+              title={revealPath() ? 'Click to reveal in folder' : hint()}
             >
-              {footerHintLine()}
-            </div>
-            <div class="bar-footer-controls">
-              <button
-                class={`status-dot-btn ${hub().drawMode ? 'on' : ''}`}
-                onClick={toggleDraw}
-                onMouseEnter={() =>
-                  showHint(hub().drawMode ? 'Drawing — click to pause' : 'Idle — click to draw')
-                }
-                onMouseLeave={clearHint}
-                title={hub().drawMode ? 'Drawing active' : 'Click to start drawing'}
-                aria-label={hub().drawMode ? 'Drawing active' : 'Drawing paused'}
-              >
-                <span class="status-dot-pulse" />
-              </button>
-              <button
-                class={`winctl footer-settings ${hub().settingsOpen ? 'tinted' : ''}`}
-                onClick={toggleSettings}
-                onMouseEnter={() => showHint('Settings')}
-                onMouseLeave={clearHint}
-                title="Settings"
-              >
-                {Icons.gear()}
-              </button>
-            </div>
-          </div>
+              {hint()}
+            </button>
+          </Show>
         </div>
 
         {/* ─── SETTINGS DROPDOWN ─── */}
@@ -1299,9 +1207,8 @@ export function ToolbarApp() {
               <button
                 class="winctl"
                 onClick={closeSettings}
-                onMouseEnter={() => showHint('Close settings')}
-                onMouseLeave={clearHint}
-                title="Close"
+                title="Close settings"
+                aria-label="Close settings"
               >{Icons.close()}</button>
             </div>
 
@@ -1939,9 +1846,8 @@ export function ToolbarApp() {
               <button
                 class="winctl"
                 onClick={closePanel}
-                onMouseEnter={() => showHint('Close')}
-                onMouseLeave={clearHint}
                 title="Close"
+                aria-label="Close"
               >{Icons.close()}</button>
             </div>
 
@@ -2036,6 +1942,44 @@ export function ToolbarApp() {
               </div>
             </Show>
           </div>
+        </Show>
+
+        {/* ─── FLYOUT CARD ─── floating tool / color card beside its
+             anchor button (Epic Pen style). Keyed so the card remounts
+             (and re-measures its position) per flyout id. */}
+        <Show when={hub().flyout} keyed>
+          {(fid) => (
+            <FlyoutCard
+              anchor={flyoutAnchor() ?? new DOMRect(8, 8, 40, 40)}
+              orient={hub().orientation}
+              side={settingsOnLeft() ? 'left' : 'right'}
+              label={fid === 'color' ? 'Color and thickness' : GROUP_LABELS[fid as GroupId]}
+            >
+              <Show
+                when={fid === 'color'}
+                fallback={
+                  <For each={groupToolsForProfile(fid as GroupId, hub().profile)}>
+                    {(t) => (
+                      <ToolButton
+                        active={hub().activeTool === t}
+                        title={`${TOOL_BY_ID[t].label} · ${toolHint(TOOL_BY_ID[t].hint)}`}
+                        label={TOOL_BY_ID[t].label}
+                        onClick={() => setTool(t)}
+                      >{TOOL_BY_ID[t].icon()}</ToolButton>
+                    )}
+                  </For>
+                }
+              >
+                <ColorFlyout
+                  color={hub().settings.color}
+                  width={hub().settings.width}
+                  tool={hub().activeTool}
+                  onColor={setColor}
+                  onWidth={pickThickness}
+                />
+              </Show>
+            </FlyoutCard>
+          )}
         </Show>
       </Show>
     </div>

@@ -1,10 +1,13 @@
 import { BrowserWindow, ipcMain } from 'electron';
 import { DEFAULT_SETTINGS, GRAPHITE_COLOR } from '../shared/constants';
 import { DEFAULT_PROFILE } from '../shared/profiles';
+import { GROUPS, GROUP_DEFAULTS, GROUP_IDS, groupOf } from '../shared/toolGroups';
 import { persisted, PERSISTED_DEFAULTS, save } from './persistence';
 import type {
   AiProfileModels,
   Calibration,
+  FlyoutId,
+  GroupId,
   HubStateUpdate,
   Orientation,
   PerToolWidth,
@@ -27,7 +30,14 @@ export interface HubState {
   theme: Theme;
   profile: ProfileId;
   settingsOpen: boolean;
-  thicknessFlyoutOpen: boolean;
+  // Open flyout card (draw / shapes / color), null when none. Transient
+  // — never persisted. Main grows the toolbar window while one is open.
+  flyout: FlyoutId | null;
+  // Last-used tool per toolbar group. Persisted; updated centrally in
+  // patch() whenever activeTool lands on a grouped tool, so hotkeys,
+  // overlay-driven changes, and toolbar clicks all keep the group
+  // buttons honest.
+  groupLastTool: Partial<Record<GroupId, ToolId>>;
   perToolWidth: PerToolWidth;
   saveDir: string | null;
   alwaysAskSavePath: boolean;
@@ -66,10 +76,11 @@ const state: HubState = {
   orientation: 'h',
   minimized: false,
   whiteboard: 'off',
-  theme: 'dark',
+  theme: 'light',
   profile: DEFAULT_PROFILE,
   settingsOpen: false,
-  thicknessFlyoutOpen: false,
+  flyout: null,
+  groupLastTool: { ...GROUP_DEFAULTS },
   perToolWidth: { pencil: 3, pen: 4, eraser: 20, highlighter: 18 },
   saveDir: null,
   alwaysAskSavePath: false,
@@ -146,6 +157,16 @@ export function hydrateFromPersistence(): void {
     highlighter: typeof storedW.highlighter === 'number' ? storedW.highlighter : PERSISTED_DEFAULTS.perToolWidth.highlighter,
   };
   state.activeTool = VALID_TOOLS.has(p.activeTool) ? p.activeTool : 'pencil';
+  // Last-used tool per group — schema-tolerant: accept only known group
+  // keys whose value is actually a member of that group; anything else
+  // (older installs, drifted records) falls back to the default.
+  const storedG = (p.groupLastTool ?? {}) as Partial<Record<GroupId, ToolId>>;
+  const validG: Partial<Record<GroupId, ToolId>> = { ...GROUP_DEFAULTS };
+  for (const gid of GROUP_IDS) {
+    const t = storedG[gid];
+    if (t && GROUPS[gid].includes(t)) validG[gid] = t;
+  }
+  state.groupLastTool = validG;
   // Save destination: null until the user picks one. Schema-tolerant —
   // older installs without this key fall through to the default.
   state.saveDir = typeof p.saveDir === 'string' ? p.saveDir : null;
@@ -213,10 +234,20 @@ export function patch(update: HubStateUpdate) {
         state.settings = { ...state.settings, width: saved };
         changed.add('settings');
       }
-    } else if (state.thicknessFlyoutOpen) {
-      // Switched away from a tool that owns the flyout — close it.
-      state.thicknessFlyoutOpen = false;
-      changed.add('thicknessFlyoutOpen');
+    }
+    // Remember the pick on its group so the group button shows it —
+    // centralised here so hotkeys / overlay / toolbar all count.
+    const group = groupOf(state.activeTool);
+    if (group && state.groupLastTool[group] !== state.activeTool) {
+      state.groupLastTool = { ...state.groupLastTool, [group]: state.activeTool };
+      changed.add('groupLastTool');
+      save('groupLastTool', state.groupLastTool);
+    }
+    // A tool pick closes any open tool-group flyout (the color flyout
+    // stays — its palette applies to every tool).
+    if (state.flyout === 'draw' || state.flyout === 'shapes') {
+      state.flyout = null;
+      changed.add('flyout');
     }
     // Pencil is locked to graphite — selecting it always resets color.
     // This is what makes "change the color → become a pen" a natural,
@@ -316,9 +347,9 @@ export function patch(update: HubStateUpdate) {
     // The dock slot holds AT MOST ONE of: settings, status panel,
     // chat panel, thickness flyout. Opening settings closes the rest.
     if (state.settingsOpen) {
-      if (state.thicknessFlyoutOpen) {
-        state.thicknessFlyoutOpen = false;
-        changed.add('thicknessFlyoutOpen');
+      if (state.flyout !== null) {
+        state.flyout = null;
+        changed.add('flyout');
       }
       if (state.statusPanelOpen) {
         state.statusPanelOpen = false;
@@ -330,15 +361,24 @@ export function patch(update: HubStateUpdate) {
       }
     }
   }
-  if (
-    update.thicknessFlyoutOpen !== undefined &&
-    update.thicknessFlyoutOpen !== state.thicknessFlyoutOpen
-  ) {
-    state.thicknessFlyoutOpen = update.thicknessFlyoutOpen;
-    changed.add('thicknessFlyoutOpen');
-    if (state.thicknessFlyoutOpen && state.settingsOpen) {
-      state.settingsOpen = false;
-      changed.add('settingsOpen');
+  if (update.flyout !== undefined && update.flyout !== state.flyout) {
+    state.flyout = update.flyout;
+    changed.add('flyout');
+    // Flyouts and the dock-slot panels are mutually exclusive — both
+    // grow the window width in v-mode and would fight over it.
+    if (state.flyout !== null) {
+      if (state.settingsOpen) {
+        state.settingsOpen = false;
+        changed.add('settingsOpen');
+      }
+      if (state.statusPanelOpen) {
+        state.statusPanelOpen = false;
+        changed.add('statusPanelOpen');
+      }
+      if (state.chatOpen) {
+        state.chatOpen = false;
+        changed.add('chatOpen');
+      }
     }
   }
   if (update.saveDir !== undefined && update.saveDir !== state.saveDir) {
@@ -370,6 +410,10 @@ export function patch(update: HubStateUpdate) {
         state.chatOpen = false;
         changed.add('chatOpen');
       }
+      if (state.flyout !== null) {
+        state.flyout = null;
+        changed.add('flyout');
+      }
     }
   }
   if (update.chatOpen !== undefined && update.chatOpen !== state.chatOpen) {
@@ -384,6 +428,10 @@ export function patch(update: HubStateUpdate) {
       if (state.statusPanelOpen) {
         state.statusPanelOpen = false;
         changed.add('statusPanelOpen');
+      }
+      if (state.flyout !== null) {
+        state.flyout = null;
+        changed.add('flyout');
       }
     }
   }

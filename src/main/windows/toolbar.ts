@@ -1,6 +1,6 @@
 import { BrowserWindow, app, ipcMain, screen } from 'electron';
 import path from 'node:path';
-import { SETTINGS_EXTRA, TOOLBAR_SIZES } from '../../shared/constants';
+import { FLYOUT_EXTRA, SETTINGS_EXTRA, TOOLBAR_SIZES } from '../../shared/constants';
 import { subscribe } from '../hub';
 import type { Orientation } from '../../shared/types';
 
@@ -17,9 +17,9 @@ let anchorPos: { x: number; y: number } | null = null;
 // enough that a 36px logo with a 5px drag border breathes.
 const MIN_SIZE = { w: 64, h: 64 };
 
-function defaultPosition(orientation: Orientation, minimized: boolean, settingsOpen: boolean) {
+function defaultPosition(orientation: Orientation, minimized: boolean, dock: DockKind) {
   const primary = screen.getPrimaryDisplay();
-  const { w, h } = sizeFor(orientation, minimized, settingsOpen);
+  const { w, h } = sizeFor(orientation, minimized, dock);
   if (orientation === 'h') {
     const x = Math.round(primary.workArea.x + (primary.workArea.width - w) / 2);
     const y = primary.workArea.y + 24;
@@ -32,16 +32,22 @@ function defaultPosition(orientation: Orientation, minimized: boolean, settingsO
   return { x, y, w, h };
 }
 
-export function sizeFor(orientation: Orientation, minimized: boolean, settingsOpen: boolean) {
+// What is claiming extra window space beyond the bare bar: a docked
+// side panel (settings / status / chat), a floating flyout card, or
+// nothing. Panels and flyouts are mutually exclusive (hub enforces it)
+// but claim different amounts of space.
+export type DockKind = 'none' | 'panel' | 'flyout';
+
+export function sizeFor(orientation: Orientation, minimized: boolean, dock: DockKind) {
   if (minimized) return MIN_SIZE;
   const base = TOOLBAR_SIZES[orientation];
-  if (!settingsOpen) return { w: base.w, h: base.h };
-  const extra = SETTINGS_EXTRA[orientation];
+  if (dock === 'none') return { w: base.w, h: base.h };
+  const extra = dock === 'panel' ? SETTINGS_EXTRA[orientation] : FLYOUT_EXTRA[orientation];
   return { w: base.w + extra.w, h: base.h + extra.h };
 }
 
 export function createToolbar(orientation: Orientation = 'h'): BrowserWindow {
-  const pos = defaultPosition(orientation, false, false);
+  const pos = defaultPosition(orientation, false, 'none');
 
   toolbar = new BrowserWindow({
     x: pos.x,
@@ -83,7 +89,9 @@ export function createToolbar(orientation: Orientation = 'h'): BrowserWindow {
   // Windows uses SetWindowDisplayAffinity(WDA_EXCLUDEFROMCAPTURE);
   // Linux is no-op. Also keeps the toolbar out of any other capture
   // tool the user runs (Loom, QuickTime, Zoom share, etc.).
-  toolbar.setContentProtection(true);
+  // LEKHINI_CAPTURE_TOOLBAR=1 disables this — needed to screenshot the
+  // toolbar itself for docs / UI review.
+  if (!process.env.LEKHINI_CAPTURE_TOOLBAR) toolbar.setContentProtection(true);
 
   if (VITE_DEV_SERVER_URL) {
     toolbar.loadURL(`${VITE_DEV_SERVER_URL}src/renderer/toolbar/index.html`);
@@ -104,24 +112,27 @@ export function getToolbar(): BrowserWindow | null {
 export function resizeToolbar(
   orientation: Orientation,
   minimized: boolean,
-  settingsOpen: boolean,
+  dock: DockKind,
   reposition: 'keep' | 'default' = 'keep',
 ) {
   if (!toolbar || toolbar.isDestroyed()) return;
-  const { w, h } = sizeFor(orientation, minimized, settingsOpen);
+  const { w, h } = sizeFor(orientation, minimized, dock);
+  const open = dock !== 'none';
 
   if (reposition === 'default') {
     // Orientation changed — drop the existing anchor and place fresh.
     anchorPos = null;
-    const pos = defaultPosition(orientation, minimized, settingsOpen);
+    const pos = defaultPosition(orientation, minimized, dock);
     toolbar.setBounds({ x: pos.x, y: pos.y, width: pos.w, height: pos.h }, true);
-    // If settings is still open after the orientation change, pre-seed
-    // the anchor to the natural closed-panel position so the inevitable
-    // close-event restores there instead of drifting on the width shrink.
-    if (settingsOpen) {
-      const closed = defaultPosition(orientation, minimized, false);
+    // If a panel/flyout is still open after the orientation change,
+    // pre-seed the anchor to the natural closed position so the
+    // inevitable close-event restores there instead of drifting on the
+    // width shrink.
+    if (open) {
+      const closed = defaultPosition(orientation, minimized, 'none');
       anchorPos = { x: closed.x, y: closed.y };
     }
+    invalidateShadow();
     return;
   }
 
@@ -129,26 +140,27 @@ export function resizeToolbar(
   const [curW] = toolbar.getSize();
   const display = screen.getDisplayNearestPoint({ x: curX, y: curY });
 
-  if (!settingsOpen && anchorPos) {
+  if (!open && anchorPos) {
     let { x: nextX, y: nextY } = anchorPos;
     anchorPos = null;
     nextX = clamp(nextX, display.workArea.x + 8, display.workArea.x + display.workArea.width - w - 8);
     nextY = clamp(nextY, display.workArea.y + 8, display.workArea.y + display.workArea.height - h - 8);
     toolbar.setBounds({ x: nextX, y: nextY, width: w, height: h }, true);
+    invalidateShadow();
     return;
   }
 
-  if (settingsOpen && !anchorPos) {
+  if (open && !anchorPos) {
     anchorPos = { x: curX, y: curY };
   }
 
   let nextX = curX;
   let nextY = curY;
 
-  // Vertical mode: settings panel grows to the left or the right of bar-main.
-  // Pick the side based on which half of the screen the toolbar sits on so
-  // the panel always extends inward (toward the screen center).
-  if (orientation === 'v' && settingsOpen) {
+  // Vertical mode: the panel/flyout grows to the left or the right of
+  // bar-main. Pick the side based on which half of the screen the
+  // toolbar sits on so it always extends inward (toward screen center).
+  if (orientation === 'v' && open) {
     const toolbarCenterX = curX + curW / 2;
     const screenCenterX = display.workArea.x + display.workArea.width / 2;
     const growLeft = toolbarCenterX > screenCenterX;
@@ -160,6 +172,16 @@ export function resizeToolbar(
   nextX = clamp(nextX, display.workArea.x + 8, display.workArea.x + display.workArea.width - w - 8);
   nextY = clamp(nextY, display.workArea.y + 8, display.workArea.y + display.workArea.height - h - 8);
   toolbar.setBounds({ x: nextX, y: nextY, width: w, height: h }, true);
+  invalidateShadow();
+}
+
+// macOS: transparent windows can leave stale shadow artifacts when
+// content appears/disappears in the transparent region (flyout cards).
+// Re-computing the shadow after each bounds change clears them; no-op
+// elsewhere.
+function invalidateShadow(): void {
+  if (process.platform !== 'darwin') return;
+  if (toolbar && !toolbar.isDestroyed()) toolbar.invalidateShadow();
 }
 
 function clamp(v: number, lo: number, hi: number): number {

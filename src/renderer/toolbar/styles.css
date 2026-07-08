@@ -42,88 +42,84 @@ html, body {
 #root { width: 100vw; height: 100vh; }
 
 /* ── Theme tokens ── */
+/* Light-first (Epic Pen-style): flat white card, one vivid accent for
+   the active tool. The dark variant keeps the same structure with
+   graphite surfaces. */
 
 .bar {
-  /* Dark (default) */
-  --bg: linear-gradient(180deg, #2a2a2e 0%, #1c1c20 100%);
-  --text: #e4e4e6;
-  --hint: rgba(228, 228, 230, 0.5);
-  --hint-accent: #e8c98a;
-  --border: rgba(255, 255, 255, 0.07);
-  --separator: rgba(255, 255, 255, 0.06);
-  --hover: rgba(255, 255, 255, 0.10);
-  --hover-strong: rgba(255, 255, 255, 0.14);
-  --group-bg: rgba(0, 0, 0, 0.20);
-  --group-border: rgba(255, 255, 255, 0.04);
-  --pin-bg: linear-gradient(180deg, rgba(0,0,0,0.18), rgba(0,0,0,0.28));
-  --footer-bg: rgba(0, 0, 0, 0.20);
-  --titlebar-bg: linear-gradient(180deg, rgba(255,255,255,0.025), rgba(255,255,255,0));
-  --input-bg: rgba(255, 255, 255, 0.10);
-  --input-track: rgba(255, 255, 255, 0.10);
-  --input-thumb: #ebebeb;
-  --input-thumb-border: #1f1f23;
-  --gold: #d8b572;
-  --gold-strong: #b89150;
-  --gold-text: #1c1c1e;
-  --hex-bg: rgba(0, 0, 0, 0.25);
-  --swatch-border: rgba(255, 255, 255, 0.20);
-  --swatch-border-hover: rgba(255, 255, 255, 0.45);
-  --winctl-bg: transparent;
-  --winctl-color: rgba(228, 228, 230, 0.7);
-  --winctl-hover: rgba(255, 255, 255, 0.10);
-  --shadow: 0 1px 0 rgba(255, 255, 255, 0.06) inset, 0 18px 50px rgba(0, 0, 0, 0.55);
-}
-
-.bar[data-theme='light'] {
-  --bg: linear-gradient(180deg, #fafafb 0%, #ececef 100%);
-  --text: #1c1c1e;
-  --hint: rgba(28, 28, 30, 0.55);
-  --hint-accent: #a07835;
+  /* Light (default) */
+  --bg: #ffffff;
+  --text: #1d1d1f;
+  --hint: rgba(29, 29, 31, 0.55);
+  --hint-accent: #2f6fce;
   --border: rgba(0, 0, 0, 0.10);
-  --separator: rgba(0, 0, 0, 0.10);
+  --separator: rgba(0, 0, 0, 0.08);
   --hover: rgba(0, 0, 0, 0.06);
   --hover-strong: rgba(0, 0, 0, 0.10);
   --group-bg: rgba(0, 0, 0, 0.04);
   --group-border: rgba(0, 0, 0, 0.06);
-  --pin-bg: linear-gradient(180deg, rgba(0,0,0,0.02), rgba(0,0,0,0.05));
-  --footer-bg: rgba(0, 0, 0, 0.03);
-  --titlebar-bg: linear-gradient(180deg, rgba(0,0,0,0.02), rgba(0,0,0,0));
-  --input-bg: rgba(0, 0, 0, 0.06);
+  --input-bg: rgba(0, 0, 0, 0.05);
   --input-track: rgba(0, 0, 0, 0.10);
   --input-thumb: #ffffff;
   --input-thumb-border: #c8c8cc;
-  --gold: #b89150;
-  --gold-strong: #957338;
-  --gold-text: #ffffff;
+  --accent: #007aff;
+  --accent-strong: #0063ce;
+  --accent-soft: color-mix(in srgb, var(--accent) 12%, transparent);
+  --on-accent: #ffffff;
   --hex-bg: rgba(0, 0, 0, 0.04);
   --swatch-border: rgba(0, 0, 0, 0.18);
   --swatch-border-hover: rgba(0, 0, 0, 0.40);
   --winctl-bg: transparent;
-  --winctl-color: rgba(28, 28, 30, 0.7);
+  --winctl-color: rgba(29, 29, 31, 0.65);
   --winctl-hover: rgba(0, 0, 0, 0.07);
-  --shadow: 0 1px 0 rgba(255, 255, 255, 0.5) inset, 0 12px 36px rgba(0, 0, 0, 0.18);
+  --shadow: 0 10px 32px rgba(0, 0, 0, 0.16), 0 2px 8px rgba(0, 0, 0, 0.08);
 }
 
-/* ── Single container ── */
+.bar[data-theme='dark'] {
+  --bg: #232327;
+  --text: #e6e6ea;
+  --hint: rgba(230, 230, 234, 0.55);
+  --hint-accent: #7ab3ff;
+  --border: rgba(255, 255, 255, 0.10);
+  --separator: rgba(255, 255, 255, 0.08);
+  --hover: rgba(255, 255, 255, 0.10);
+  --hover-strong: rgba(255, 255, 255, 0.14);
+  --group-bg: rgba(0, 0, 0, 0.22);
+  --group-border: rgba(255, 255, 255, 0.05);
+  --input-bg: rgba(255, 255, 255, 0.10);
+  --input-track: rgba(255, 255, 255, 0.10);
+  --input-thumb: #ebebeb;
+  --input-thumb-border: #1f1f23;
+  --accent: #0a84ff;
+  --accent-strong: #0870d8;
+  --accent-soft: color-mix(in srgb, var(--accent) 16%, transparent);
+  --on-accent: #ffffff;
+  --hex-bg: rgba(0, 0, 0, 0.25);
+  --swatch-border: rgba(255, 255, 255, 0.22);
+  --swatch-border-hover: rgba(255, 255, 255, 0.45);
+  --winctl-bg: transparent;
+  --winctl-color: rgba(230, 230, 234, 0.7);
+  --winctl-hover: rgba(255, 255, 255, 0.10);
+  --shadow: 0 12px 36px rgba(0, 0, 0, 0.5), 0 2px 8px rgba(0, 0, 0, 0.3);
+}
+
+/* ── Transparent wrapper ── */
+/* The window is often larger than the bar (flyouts / dock panels), so
+   .bar itself paints nothing; .bar-main and each panel/card draw their
+   own surface. */
 
 .bar {
   position: relative;
   width: 100vw;
   height: 100vh;
-  background: var(--bg);
   color: var(--text);
-  border: 1px solid var(--border);
-  border-radius: 11px;
   display: flex;
   flex-direction: column;
-  overflow: hidden;
-  box-shadow: var(--shadow);
+  gap: 8px;
 }
 
-/* Horizontal layout: when settings is open, bar-main and settings-panel
-   stack vertically (default column flex). Vertical layout: bar-main and
-   settings-panel sit side by side (row flex), with row-reverse if the
-   toolbar sits on the left half of the screen so the panel grows inward. */
+/* v-mode with a dock panel: bar-main and the panel sit side by side,
+   panel growing inward (toward screen center). */
 .bar[data-orient='v'][data-settings-open='true'] {
   flex-direction: row;
 }
@@ -132,76 +128,70 @@ html, body {
 }
 
 .bar-main {
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  box-shadow: var(--shadow);
   display: flex;
   flex-direction: column;
   flex-shrink: 0;
   flex-grow: 0;
   min-height: 0;
   min-width: 0;
+  overflow: hidden;
 }
-/* bar-main is content-sized so settings-panel (rendered as a sibling
-   when open) can claim its share of the bar. The window itself
-   adapts to content via setContentSize from App.tsx, so the trailing
-   space below bar-main stays minimal. */
-.bar[data-orient='h'] .bar-main { width: 100%; }
-.bar[data-orient='v'] .bar-main { width: 88px; }
+.bar[data-orient='v'] .bar-main { width: 64px; }
+.bar[data-orient='h'] .bar-main { width: fit-content; max-width: 100%; }
 
-/* ─────────────────── HORIZONTAL TITLE BAR ─────────────────── */
+/* ── Row scaffold: column in v-mode, row in h-mode ── */
 
-.h-titlebar {
+.bar-row {
+  display: flex;
+  min-height: 0;
+  min-width: 0;
+}
+.bar[data-orient='v'] .bar-row {
+  flex-direction: column;
+  align-items: center;
+  flex: 1 1 auto;
+}
+.bar[data-orient='h'] .bar-row {
+  flex-direction: row;
+  align-items: center;
+  height: 58px;
+  padding: 0 4px;
+  gap: 2px;
+}
+
+/* ── Micro-strip: window controls + primary drag region ── */
+
+.strip {
   -webkit-app-region: drag;
-  display: grid;
-  grid-template-columns: 1fr auto 1fr;
-  align-items: center;
-  height: 28px;
-  padding: 0 8px;
-  border-bottom: 1px solid var(--separator);
-  background: var(--titlebar-bg);
   flex-shrink: 0;
-  gap: 8px;
-}
-
-.tb-side {
   display: flex;
   align-items: center;
-  gap: 4px;
+  justify-content: center;
+}
+.bar[data-orient='v'] .strip { width: 100%; padding: 8px 8px 2px; }
+.bar[data-orient='h'] .strip { padding: 0 4px; align-self: stretch; }
+
+.winctls {
   -webkit-app-region: no-drag;
-  min-width: 0;
-}
-.tb-left  { justify-self: start; }
-.tb-right { justify-self: end; }
-
-.tb-center {
   display: flex;
+  gap: 4px;
   align-items: center;
-  gap: 8px;
-  justify-self: center;
-  min-width: 0;
-  pointer-events: none;
 }
-.tb-center .logo { display: inline-flex; align-items: center; }
-/* h-mode logo: bigger now that nothing else sits in the titlebar
-   center. Subtle hover scale + soft glow when drawing so it doubles
-   as a brand mark and a 'is this thing working' affordance. */
-.tb-center .logo.big svg,
-.tb-center .logo.big img { width: 32px; height: 32px; border-radius: 7px; }
-.tb-center .logo.big {
-  transition: transform 0.18s cubic-bezier(0.2, 0.7, 0.2, 1);
-}
-.tb-center .logo.big:hover { transform: scale(1.06); }
-/* (Hover-hint text moved out of the titlebar into the new
-   .bar-footer at the bottom of the bar — see footer rules below.) */
 
-/* ── Window controls (generic / Windows) ── */
+/* ── Window controls (generic / Windows / Linux) ── */
 
 .winctl {
   appearance: none;
   background: var(--winctl-bg);
   color: var(--winctl-color);
   border: none;
-  width: 22px;
-  height: 22px;
-  border-radius: 5px;
+  width: 20px;
+  height: 20px;
+  border-radius: 6px;
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -211,7 +201,7 @@ html, body {
 }
 .winctl:hover { background: var(--winctl-hover); color: var(--text); }
 .winctl.danger:hover { background: #e81123; color: #fff; }
-.winctl svg { width: 14px; height: 14px; }
+.winctl svg { width: 13px; height: 13px; }
 
 /* ── macOS traffic lights ── */
 
@@ -243,304 +233,187 @@ html, body {
 .mac-traffic:hover .mac-light { color: rgba(0, 0, 0, 0.55); }
 .mac-light:active { filter: brightness(0.85); }
 
-/* ─────────────────── VERTICAL TOP STACK ─────────────────── */
+/* ── Brand: logo doubles as a drag handle ── */
 
-.v-controls {
+.brand {
   -webkit-app-region: drag;
   display: flex;
   align-items: center;
   justify-content: center;
-  gap: 6px;
-  padding: 8px 0 4px 0;
   flex-shrink: 0;
 }
-.v-collapse {
-  -webkit-app-region: no-drag;
-  width: 20px;
-  height: 20px;
-}
-.v-collapse svg { width: 12px; height: 12px; }
-.v-traffic, .v-winctls {
-  -webkit-app-region: no-drag;
-  display: flex;
-  gap: 6px;
-  align-items: center;
-}
-.v-winctls .winctl { width: 20px; height: 20px; }
-.v-winctls .winctl svg { width: 12px; height: 12px; }
-
-.v-brand {
-  -webkit-app-region: drag;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 6px;
-  padding: 4px 0 8px 0;
+.bar[data-orient='v'] .brand {
+  width: 100%;
+  padding: 2px 0 8px;
   border-bottom: 1px solid var(--separator);
-  flex-shrink: 0;
+  margin-bottom: 4px;
 }
-.v-brand .logo { display: inline-flex; }
-/* v-mode logo: even bigger now that brand strip carries only the
-   logo (settings + status-dot moved to footer). The vertical
-   toolbar is 88px wide so 40px works comfortably with breathing
-   room. */
-.v-brand .logo svg, .v-brand .logo img { width: 40px; height: 40px; border-radius: 9px; }
-.v-brand .logo {
-  transition: transform 0.18s cubic-bezier(0.2, 0.7, 0.2, 1);
+.bar[data-orient='h'] .brand {
+  padding: 0 6px;
+  align-self: stretch;
 }
-.v-brand .logo:hover { transform: scale(1.06); }
+.brand .logo { display: inline-flex; align-items: center; }
+.brand .logo svg,
+.brand .logo img { width: 34px; height: 34px; border-radius: 8px; }
 
-.v-theme-btn {
-  -webkit-app-region: no-drag;
-  appearance: none;
-  background: transparent;
-  color: var(--winctl-color);
-  border: none;
-  width: 20px;
-  height: 20px;
-  border-radius: 5px;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  cursor: pointer;
-  padding: 0;
-}
-.v-theme-btn:hover { background: var(--winctl-hover); color: var(--text); }
-.v-theme-btn svg { width: 12px; height: 12px; }
-
-/* (The old .v-hint strip was removed — the hover-hint now lives in
-   the bottom .bar-footer that's shared by both orientations.) */
-
-/* ─────────────────── SCROLL AREA ─────────────────── */
+/* ── Scroll area (tools · actions · color) ── */
 
 .scroll-area {
-  /* No flex-grow: the window resizes to content via setContentSize, so
-     scroll-area takes its natural size instead of stretching to fill
-     and leaving empty space inside. Shrink is allowed for graceful
-     degradation if the window can't grow further. */
   flex: 0 1 auto;
   min-height: 0;
   min-width: 0;
-  overflow-y: auto;
-  overflow-x: hidden;
   -webkit-app-region: no-drag;
   scrollbar-width: none;
   -ms-overflow-style: none;
+  display: flex;
+  align-items: center;
 }
 .scroll-area::-webkit-scrollbar { display: none; width: 0; height: 0; }
-
-/* ─── HORIZONTAL layout ─── */
-
-.bar[data-orient='h'] .scroll-area {
-  display: flex;
-  align-items: center;
-  flex-direction: row;
-  flex-wrap: nowrap;
-  /* Extra right padding so the color grid (right-aligned via
-     margin-left:auto) keeps a visible 18px margin from the toolbar's
-     right edge across all profiles. */
-  padding: 6px 18px 6px 10px;
+.bar[data-orient='v'] .scroll-area {
+  flex-direction: column;
+  overflow-y: auto;
+  overflow-x: hidden;
+  padding: 2px 8px 6px;
   gap: 8px;
+  width: 100%;
+}
+.bar[data-orient='h'] .scroll-area {
+  flex-direction: row;
   overflow-x: auto;
   overflow-y: hidden;
+  padding: 4px 4px;
+  gap: 8px;
 }
 
-.bar[data-orient='h'] .tools-zone,
-.bar[data-orient='h'] .actions-zone {
+.tools-zone, .actions-zone {
   display: flex;
-  align-items: center;
   gap: 3px;
-  background: var(--group-bg);
-  border: 1px solid var(--group-border);
-  border-radius: 8px;
-  padding: 3px;
   flex-shrink: 0;
 }
-
-.bar[data-orient='h'] .zone-sep {
-  width: 1px;
-  height: 22px;
-  background: var(--separator);
-  flex-shrink: 0;
-}
-
-
-/* Inline color grid in h-mode sits right after the thickness icon
-   inside scroll-area, pushed to the right via margin-left:auto. The
-   scroll-area's right padding (set above) provides the visible
-   margin from the bar's right edge. */
-.bar[data-orient='h'] .color-grid {
-  display: grid;
-  grid-template-columns: repeat(6, 14px);
-  grid-auto-rows: 14px;
-  gap: 4px;
-  padding: 4px 6px;
-  align-items: center;
-  margin-left: auto;
-  background: var(--group-bg);
-  border: 1px solid var(--group-border);
-  border-radius: 8px;
-  flex-shrink: 0;
-}
-.bar[data-orient='h'] .color-grid .swatch {
-  width: 14px;
-  height: 14px;
-  border-width: 1px;
-}
-.bar[data-orient='h'] .color-grid .hex-pick {
-  width: 14px;
-  height: 14px;
-  margin-left: 0;
-}
-.bar[data-orient='h'] .color-grid .hex-glyph { font-size: 11px; }
-
-.bar[data-orient='h'] .pinned {
-  flex-direction: row;
-  justify-content: flex-start;
-}
-/* H-mode pinned has no content (swatches are inline in scroll-area).
-   Hide the empty wrapper so it doesn't contribute padding+border. */
-.bar[data-orient='h'] .pinned:empty {
-  display: none;
-}
-
-/* ─── VERTICAL layout ─── */
-
-.bar[data-orient='v'] .scroll-area {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  padding: 8px 4px;
-  gap: 6px;
-}
-
 .bar[data-orient='v'] .tools-zone,
 .bar[data-orient='v'] .actions-zone {
-  display: grid;
-  grid-template-columns: repeat(2, 26px);
-  gap: 4px;
-  background: var(--group-bg);
-  border: 1px solid var(--group-border);
-  border-radius: 8px;
-  padding: 4px;
-}
-
-.bar[data-orient='v'] .zone-sep {
-  width: 40px;
-  height: 1px;
-  background: var(--separator);
-  margin: 2px 0;
-}
-
-.bar[data-orient='v'] .pinned {
   flex-direction: column;
   align-items: center;
-  gap: 8px;
-  padding: 8px 4px 8px 4px;
 }
 
-.bar[data-orient='v'] .swatches {
-  display: grid;
-  grid-template-columns: repeat(4, 14px);
-  gap: 4px;
-  justify-content: center;
-}
-.bar[data-orient='v'] .swatch { width: 14px; height: 14px; border-width: 1px; }
-.bar[data-orient='v'] .hex-pick { width: 14px; height: 14px; }
-.bar[data-orient='v'] .hex-glyph { font-size: 11px; }
+.zone-sep { background: var(--separator); flex-shrink: 0; }
+.bar[data-orient='v'] .zone-sep { width: 28px; height: 1px; margin: 1px 0; }
+.bar[data-orient='h'] .zone-sep { width: 1px; height: 28px; margin: 0 2px; }
 
-/* ── Keyboard focus ── */
-/* Gold ring on keyboard focus only (:focus-visible skips mouse clicks),
-   matching the ring text inputs already get. :where() keeps specificity
-   at zero so component states still win. */
-:where(button, select, a, .swatch, .hex-pick):focus-visible {
-  outline: 2px solid var(--gold);
-  outline-offset: 1px;
-}
-.hex-pick:focus-within {
-  outline: 2px solid var(--gold);
-  outline-offset: 1px;
-}
+/* ── Tool buttons: large, flat, one accent for active ── */
 
-/* ─────────────────── BUTTONS ─────────────────── */
-
-.tool-btn, .action-btn {
+.tool-btn {
   appearance: none;
+  position: relative;
   background: transparent;
   color: var(--text);
-  border: 1px solid transparent;
-  border-radius: 7px;
-  width: 26px;
-  height: 26px;
+  border: none;
+  border-radius: 10px;
+  width: 40px;
+  height: 40px;
   display: inline-flex;
   align-items: center;
   justify-content: center;
   cursor: pointer;
   padding: 0;
+  opacity: 0.9;
   transition:
     background 0.16s cubic-bezier(0.4, 0, 0.2, 1),
     color 0.16s cubic-bezier(0.4, 0, 0.2, 1),
     transform 0.10s cubic-bezier(0.4, 0, 0.2, 1),
-    box-shadow 0.16s cubic-bezier(0.4, 0, 0.2, 1),
-    border-color 0.16s cubic-bezier(0.4, 0, 0.2, 1);
-  opacity: 0.85;
+    box-shadow 0.16s cubic-bezier(0.4, 0, 0.2, 1);
 }
-.tool-btn:hover, .action-btn:hover {
-  background: var(--hover);
-  opacity: 1;
-  transform: translateY(-1px);
-}
-.tool-btn:active, .action-btn:active { transform: scale(0.96); }
+.tool-btn svg { width: 21px; height: 21px; }
+.tool-btn:hover { background: var(--hover); opacity: 1; }
+.tool-btn:active { transform: scale(0.94); }
 .tool-btn.active {
-  background: linear-gradient(180deg, var(--gold) 0%, var(--gold-strong) 100%);
-  color: var(--gold-text);
-  border-color: rgba(0,0,0,0.25);
+  background: var(--accent);
+  color: var(--on-accent);
   opacity: 1;
-  box-shadow:
-    inset 0 -2px 0 rgba(0, 0, 0, 0.18),
-    0 1px 2px rgba(0, 0, 0, 0.4),
-    0 0 0 2px rgba(216, 181, 114, 0.18);
+  box-shadow: 0 2px 10px color-mix(in srgb, var(--accent) 40%, transparent);
 }
-.action-btn.tinted {
-  background: rgba(216, 181, 114, 0.18);
-  color: var(--gold);
-  opacity: 1;
+.tool-btn[disabled] { opacity: 0.35; cursor: not-allowed; }
+.tool-btn[disabled]:hover { background: transparent; transform: none; }
+
+/* Eye — the master draw-mode toggle gets a touch more presence. */
+.eye-btn { margin-bottom: 1px; }
+.eye-btn:not(.active) { color: var(--hint); }
+
+/* Group buttons: corner triangle marks "more tools here". */
+.group-corner {
+  position: absolute;
+  right: 4px;
+  bottom: 4px;
+  width: 0;
+  height: 0;
+  border-left: 5px solid transparent;
+  border-bottom: 5px solid currentColor;
+  opacity: 0.55;
+  pointer-events: none;
 }
-.tool-btn svg, .action-btn svg { width: 18px; height: 18px; }
+.group-btn.open { background: var(--accent-soft); }
 
-/* ─────────────────── PINNED COLOR / WIDTH ─────────────────── */
+/* ── Color cluster: current-color dot + quick swatches ── */
 
-.pinned {
-  flex-shrink: 0;
-  border-top: 1px solid var(--separator);
-  background: var(--pin-bg);
-  padding: 8px 10px;
+.color-cluster {
   display: flex;
   align-items: center;
-  gap: 12px;
+  gap: 6px;
+  flex-shrink: 0;
+}
+.bar[data-orient='v'] .color-cluster { flex-direction: column; }
+
+.color-dot {
+  appearance: none;
+  position: relative;
+  background: transparent;
+  border: none;
+  border-radius: 10px;
+  width: 40px;
+  height: 40px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  padding: 0;
+}
+.color-dot:hover, .color-dot.open { background: var(--hover); }
+.color-dot-fill {
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  border: 2px solid var(--swatch-border);
+  box-shadow: inset 0 0 0 1px rgba(0, 0, 0, 0.06);
 }
 
-.swatches { display: flex; gap: 6px; align-items: center; }
+.pinned-swatches { display: grid; gap: 4px; }
+.bar[data-orient='v'] .pinned-swatches { grid-template-columns: repeat(3, 14px); }
+.bar[data-orient='h'] .pinned-swatches { grid-template-columns: repeat(6, 14px); }
+
+/* ── Swatches (cluster + color flyout) ── */
+
 .swatch {
   appearance: none;
   padding: 0;
-  width: 22px;
-  height: 22px;
-  border-radius: 5px;
+  width: 18px;
+  height: 18px;
+  border-radius: 6px;
   border: 2px solid var(--swatch-border);
   cursor: pointer;
   transition: transform 0.10s cubic-bezier(0.4, 0, 0.2, 1), border-color 0.14s, box-shadow 0.14s;
 }
-.swatch:hover { transform: scale(1.08); border-color: var(--swatch-border-hover); }
+.swatch:hover { transform: scale(1.1); border-color: var(--swatch-border-hover); }
 .swatch.active {
-  border-color: var(--gold);
-  box-shadow: 0 0 0 2px rgba(216, 181, 114, 0.30);
+  border-color: var(--accent);
+  box-shadow: 0 0 0 2px var(--accent-soft);
 }
+.mini-swatch { width: 14px; height: 14px; border-width: 1px; border-radius: 4px; }
+
 .hex-pick {
   position: relative;
-  width: 22px;
-  height: 22px;
-  border-radius: 5px;
+  width: 18px;
+  height: 18px;
+  border-radius: 6px;
   border: 2px dashed var(--swatch-border);
   display: inline-flex;
   align-items: center;
@@ -549,76 +422,150 @@ html, body {
   color: var(--text);
   opacity: 0.7;
   overflow: hidden;
-  margin-left: 2px;
 }
 .hex-pick:hover { opacity: 1; border-color: var(--swatch-border-hover); }
 .hex-pick input[type='color'] {
   position: absolute; inset: 0; width: 100%; height: 100%;
   opacity: 0; border: none; padding: 0; cursor: pointer;
 }
-.hex-glyph { font-size: 14px; line-height: 1; pointer-events: none; }
+.hex-glyph { font-size: 12px; line-height: 1; pointer-events: none; }
 
-/* ─────────────────── STATUS DOT (replaces draw/pass toggle) ─────────────────── */
+/* ── Bar end: settings gear pinned at the bottom / right ── */
 
-.status-dot-btn {
-  -webkit-app-region: no-drag;
+.bar-end {
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.bar[data-orient='v'] .bar-end {
+  width: 100%;
+  margin-top: auto;
+  padding: 6px 0 8px;
+  border-top: 1px solid var(--separator);
+}
+.bar[data-orient='h'] .bar-end { padding: 0 4px; }
+.bar-end .winctl.footer-settings { width: 26px; height: 26px; }
+.bar-end .winctl.footer-settings svg { width: 15px; height: 15px; }
+
+/* ── Save toast: transient "Saved · path" pill ── */
+
+.toast {
   appearance: none;
-  background: transparent;
   border: none;
+  background: var(--group-bg);
+  color: var(--hint);
+  font: inherit;
+  font-size: 10px;
+  line-height: 1.3;
+  border-radius: 8px;
+  margin: 0 6px 6px;
+  padding: 4px 7px;
+  cursor: default;
+  text-align: center;
+  overflow: hidden;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  -webkit-app-region: no-drag;
+}
+
+/* ── Flyout card: floating tool / color card ── */
+
+@keyframes flyoutIn {
+  from { opacity: 0; transform: scale(0.96); }
+  to   { opacity: 1; transform: scale(1); }
+}
+@keyframes panelIn {
+  from { opacity: 0; transform: translateY(4px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+.flyout-card {
+  position: absolute;
+  z-index: 60;
+  -webkit-app-region: no-drag;
+  display: flex;
+  align-items: center;
+  gap: 3px;
+  padding: 5px;
+  background: var(--bg);
+  color: var(--text);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  box-shadow: var(--shadow);
+  animation: flyoutIn 0.16s cubic-bezier(0.2, 0.7, 0.2, 1);
+}
+
+/* Color flyout content */
+.color-flyout {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 4px;
+}
+.cf-swatches {
+  display: grid;
+  grid-template-columns: repeat(7, 18px);
+  gap: 6px;
+  align-items: center;
+  justify-items: center;
+}
+.cf-thickness {
+  display: flex;
+  gap: 4px;
+  border-top: 1px solid var(--separator);
+  padding-top: 8px;
+}
+
+/* Thickness chips (inside the color flyout) */
+.thickness-chip {
+  appearance: none;
+  background: var(--input-bg);
+  border: 1px solid var(--border);
+  border-radius: 7px;
+  width: 30px;
+  height: 30px;
   padding: 0;
-  width: 14px;
-  height: 14px;
-  border-radius: 50%;
   display: inline-flex;
   align-items: center;
   justify-content: center;
   cursor: pointer;
   flex-shrink: 0;
-  pointer-events: auto;
+  transition:
+    background 0.14s cubic-bezier(0.4, 0, 0.2, 1),
+    border-color 0.14s cubic-bezier(0.4, 0, 0.2, 1),
+    transform 0.10s cubic-bezier(0.4, 0, 0.2, 1);
 }
-.status-dot-btn .status-dot-pulse {
-  width: 9px;
-  height: 9px;
+.thickness-chip:hover { background: var(--hover); border-color: var(--swatch-border); }
+.thickness-chip:active { transform: scale(0.94); }
+.thickness-chip.active {
+  background: var(--accent-soft);
+  border-color: var(--accent);
+}
+.thickness-chip-dot {
   border-radius: 50%;
-  background: #e74c3c;
-  box-shadow:
-    0 0 0 1px rgba(0, 0, 0, 0.25),
-    0 0 5px rgba(231, 76, 60, 0.55);
-  transition: background 0.18s ease, box-shadow 0.18s ease, transform 0.16s ease;
-}
-.status-dot-btn:hover .status-dot-pulse {
-  transform: scale(1.18);
-}
-.status-dot-btn.on .status-dot-pulse {
-  background: #34c759;
-  box-shadow:
-    0 0 0 1px rgba(0, 0, 0, 0.25),
-    0 0 8px rgba(52, 199, 89, 0.85),
-    0 0 14px rgba(52, 199, 89, 0.35);
-  animation: statusPulse 1.8s ease-in-out infinite;
-}
-@keyframes statusPulse {
-  0%, 100% { box-shadow: 0 0 0 1px rgba(0,0,0,0.25), 0 0 8px rgba(52, 199, 89, 0.85), 0 0 14px rgba(52, 199, 89, 0.35); }
-  50%      { box-shadow: 0 0 0 1px rgba(0,0,0,0.25), 0 0 10px rgba(52, 199, 89, 0.95), 0 0 22px rgba(52, 199, 89, 0.55); }
-}
-.status-dot-btn.v {
-  width: 16px;
-  height: 16px;
-  margin-left: 2px;
-}
-.status-dot-btn.v .status-dot-pulse {
-  width: 10px;
-  height: 10px;
+  min-width: 2px;
+  min-height: 2px;
+  transition: width 0.14s, height 0.14s, background 0.16s;
 }
 
-/* ─────────────────── MINIMIZED PILL ─────────────────── */
-/* Layout: outer .mini is the drag region (thin border around the
-   pill) so the user can still move the collapsed toolbar. The inner
-   .mini-logo fills almost the whole pill and is the click target
-   that restores — click events on drag regions are eaten by Electron,
-   so the previous setup (whole pill draggable, tiny logo span as the
-   only click target) made restoring fragile because users couldn't
-   reliably hit the 30px logo inside the 56px pill. */
+/* ── Keyboard focus ── */
+/* Accent ring on keyboard focus only (:focus-visible skips mouse
+   clicks). :where() keeps specificity at zero so component states win. */
+:where(button, select, a, .swatch, .hex-pick):focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+}
+.hex-pick:focus-within {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+}
+
+/* ── Minimized pill ── */
+/* .bar paints nothing, so the pill draws its own card. The outer .mini
+   is the drag region; the inner .mini-logo is the restore click target
+   (clicks on drag regions are eaten by Electron). */
 
 .mini {
   width: 100%;
@@ -626,6 +573,10 @@ html, body {
   position: relative;
   cursor: pointer;
   -webkit-app-region: drag;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 16px;
+  box-shadow: var(--shadow);
 }
 .mini-logo {
   appearance: none;
@@ -640,7 +591,7 @@ html, body {
   display: flex;
   align-items: center;
   justify-content: center;
-  border-radius: 8px;
+  border-radius: 12px;
   cursor: pointer;
   transition: background 0.15s, transform 0.15s cubic-bezier(0.2, 0.7, 0.2, 1);
 }
@@ -653,7 +604,7 @@ html, body {
 .mini-logo img {
   width: 36px;
   height: 36px;
-  border-radius: 7px;
+  border-radius: 8px;
   object-fit: contain;
   pointer-events: none; /* clicks land on .mini-logo, not the image */
 }
@@ -664,7 +615,9 @@ html, body {
   -webkit-app-region: no-drag;
   background: var(--bg);
   color: var(--text);
-  border-radius: 0;
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  box-shadow: var(--shadow);
   display: flex;
   flex-direction: column;
   gap: 14px;
@@ -679,15 +632,6 @@ html, body {
   scrollbar-color: var(--swatch-border) transparent;
 }
 
-.bar[data-orient='h'][data-settings-open='true'] .settings-panel {
-  border-top: 1px solid var(--separator);
-}
-.bar[data-orient='v'][data-settings-open='true'][data-settings-side='right'] .settings-panel {
-  border-left: 1px solid var(--separator);
-}
-.bar[data-orient='v'][data-settings-open='true'][data-settings-side='left'] .settings-panel {
-  border-right: 1px solid var(--separator);
-}
 
 .settings-header {
   display: flex;
@@ -741,9 +685,9 @@ html, body {
   border-color: var(--swatch-border);
 }
 .profile-card.active {
-  background: rgba(216, 181, 114, 0.16);
-  border-color: var(--gold);
-  box-shadow: 0 0 0 1px rgba(216, 181, 114, 0.25) inset;
+  background: color-mix(in srgb, var(--accent) 16%, transparent);
+  border-color: var(--accent);
+  box-shadow: 0 0 0 1px color-mix(in srgb, var(--accent) 25%, transparent) inset;
 }
 
 .profile-card-row {
@@ -757,7 +701,7 @@ html, body {
   font-weight: 600;
 }
 .profile-card-tick {
-  color: var(--gold);
+  color: var(--accent);
   display: inline-flex;
 }
 .profile-card-tick svg { width: 14px; height: 14px; }
@@ -802,8 +746,8 @@ html, body {
 .settings-toggle-icon svg { width: 13px; height: 13px; }
 
 .winctl.tinted {
-  background: rgba(216, 181, 114, 0.18);
-  color: var(--gold);
+  background: color-mix(in srgb, var(--accent) 18%, transparent);
+  color: var(--accent);
 }
 
 /* ─────────────────── ABOUT CARD ─────────────────── */
@@ -876,105 +820,10 @@ html, body {
   border-top: 1px dashed var(--separator);
 }
 
-/* ─────────────────── INLINE THICKNESS POPUP ─────────────────── */
-
-@keyframes thicknessPopIn {
-  from { opacity: 0; transform: translateY(-2px) scale(0.96); }
-  to   { opacity: 1; transform: translateY(0) scale(1); }
-}
-
-.thickness-popup {
-  -webkit-app-region: no-drag;
-  display: inline-flex;
-  align-items: center;
-  gap: 4px;
-  padding: 4px;
-  background: var(--group-bg);
-  border: 1px solid var(--group-border);
-  border-radius: 8px;
-  box-shadow: 0 6px 18px rgba(0, 0, 0, 0.30);
-  flex-shrink: 0;
-  /* Popup now lives in its own row as a sibling of scroll-area, so the
-     bar window grows vertically to accommodate it and the popup never
-     gets clipped or pushed off-screen. Center it horizontally — the
-     tinted thickness trigger button still indicates the state. */
-  align-self: center;
-  animation: thicknessPopIn 0.14s cubic-bezier(0.2, 0.7, 0.2, 1);
-}
-
-.bar[data-orient='h'] .thickness-popup {
-  margin: 4px 0 6px 0;
-}
-
-.bar[data-orient='v'] .thickness-popup {
-  margin: 4px 0;
-  padding: 3px;
-  gap: 2px;
-}
-
-.thickness-chip {
-  appearance: none;
-  background: var(--input-bg);
-  border: 1px solid var(--border);
-  border-radius: 6px;
-  width: 30px;
-  height: 30px;
-  padding: 0;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  cursor: pointer;
-  flex-shrink: 0;
-  transition:
-    background 0.14s cubic-bezier(0.4, 0, 0.2, 1),
-    border-color 0.14s cubic-bezier(0.4, 0, 0.2, 1),
-    transform 0.10s cubic-bezier(0.4, 0, 0.2, 1),
-    box-shadow 0.14s cubic-bezier(0.4, 0, 0.2, 1);
-}
-.bar[data-orient='v'] .thickness-chip {
-  width: 18px;
-  height: 18px;
-  border-radius: 5px;
-}
-.thickness-chip:hover {
-  background: var(--hover);
-  border-color: var(--swatch-border);
-  transform: translateY(-1px);
-}
-.thickness-chip:active {
-  transform: scale(0.94);
-}
-.thickness-chip.active {
-  background: rgba(216, 181, 114, 0.18);
-  border-color: var(--gold);
-  box-shadow: 0 0 0 1px rgba(216, 181, 114, 0.30) inset;
-}
-.thickness-chip-dot {
-  border-radius: 50%;
-  min-width: 2px;
-  min-height: 2px;
-  transition: width 0.14s, height 0.14s, background 0.16s;
-}
-
-/* Disabled state for the thickness trigger when the active tool isn't
-   pencil/pen/eraser/highlighter — chip selection doesn't apply. */
-.action-btn.thickness-trigger[disabled] {
-  opacity: 0.35;
-  cursor: not-allowed;
-}
-.action-btn.thickness-trigger[disabled]:hover {
-  background: transparent;
-  transform: none;
-}
-
-
 /* ─────────────────── SETTINGS PANEL TRANSITIONS ─────────────────── */
 
 .settings-panel {
-  animation: thicknessFlyoutIn 0.22s cubic-bezier(0.2, 0.7, 0.2, 1);
-}
-.bar[data-orient='v'] .settings-panel {
-  animation: thicknessFlyoutInV 0.22s cubic-bezier(0.2, 0.7, 0.2, 1);
+  animation: panelIn 0.22s cubic-bezier(0.2, 0.7, 0.2, 1);
 }
 
 .swatch {
@@ -1001,8 +850,8 @@ html, body {
   width: 32px;
   height: 32px;
   border-radius: 8px;
-  background: rgba(216, 181, 114, 0.18);
-  color: var(--gold);
+  background: color-mix(in srgb, var(--accent) 18%, transparent);
+  color: var(--accent);
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -1057,8 +906,8 @@ html, body {
 }
 
 .status-btn-primary {
-  background: linear-gradient(180deg, var(--gold) 0%, var(--gold-strong) 100%) !important;
-  color: var(--gold-text) !important;
+  background: linear-gradient(180deg, var(--accent) 0%, var(--accent-strong) 100%) !important;
+  color: var(--on-accent) !important;
   border-color: rgba(0, 0, 0, 0.25) !important;
   font-weight: 600;
 }
@@ -1076,20 +925,18 @@ html, body {
   background: rgba(231, 76, 60, 0.12) !important;
 }
 
-/* Clickable success hint in the footer — when revealPath is set the
-   message becomes a Reveal link. Gold accent + pointer cursor. */
-.bar-footer-hint.is-reveal {
-  color: var(--gold) !important;
+/* Clickable success state on the save toast — when revealPath is set
+   the pill becomes a Reveal link. Accent color + pointer cursor. */
+.toast.is-reveal {
+  color: var(--accent);
   cursor: pointer;
-  -webkit-app-region: no-drag;
-  pointer-events: auto;
   text-decoration: underline;
   text-decoration-thickness: 1px;
-  text-decoration-color: rgba(216, 181, 114, 0.5);
+  text-decoration-color: color-mix(in srgb, var(--accent) 50%, transparent);
   text-underline-offset: 2px;
 }
-.bar-footer-hint.is-reveal:hover {
-  text-decoration-color: var(--gold);
+.toast.is-reveal:hover {
+  text-decoration-color: var(--accent);
 }
 
 /* ─────────────────── FILE-SAVE SETTINGS ROW EXTRAS ─────────────────── */
@@ -1106,9 +953,9 @@ html, body {
 }
 
 .settings-toggle.on {
-  background: rgba(216, 181, 114, 0.18);
-  color: var(--gold);
-  border-color: rgba(216, 181, 114, 0.30);
+  background: color-mix(in srgb, var(--accent) 18%, transparent);
+  color: var(--accent);
+  border-color: color-mix(in srgb, var(--accent) 30%, transparent);
 }
 
 .settings-path {
@@ -1119,73 +966,6 @@ html, body {
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
-}
-
-/* ─────────────────── BAR FOOTER ─────────────────── */
-/* Bottom strip in both orientations carrying the hover-hint on the
-   left and the rarely-used status-dot + settings button on the right.
-   Moved here from the titlebar so the top of the toolbar is just the
-   logo + window controls, and incidental UI (like 'what does this
-   button do?' tooltips) doesn't compete with the brand mark. */
-
-.bar-footer {
-  -webkit-app-region: drag;
-  flex-shrink: 0;
-  border-top: 1px solid var(--separator);
-  background: var(--footer-bg);
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  padding: 4px 6px;
-}
-
-.bar-footer-hint {
-  flex: 1 1 auto;
-  min-width: 0;
-  font-size: 10.5px;
-  color: var(--hint);
-  letter-spacing: 0.01em;
-  transition: color 0.15s;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-.bar-footer-hint.has-hint {
-  color: var(--hint-accent);
-  font-weight: 500;
-}
-
-.bar-footer-controls {
-  -webkit-app-region: no-drag;
-  display: inline-flex;
-  align-items: center;
-  gap: 4px;
-  flex-shrink: 0;
-}
-.bar-footer-controls .winctl.footer-settings {
-  width: 22px;
-  height: 22px;
-}
-.bar-footer-controls .winctl.footer-settings svg { width: 13px; height: 13px; }
-
-/* Vertical-mode footer needs to stack — the bar is 88px wide which
-   isn't enough room for hint text alongside two buttons in a row. */
-.bar[data-orient='v'] .bar-footer {
-  flex-direction: column;
-  gap: 4px;
-  padding: 6px 4px;
-}
-.bar[data-orient='v'] .bar-footer-hint {
-  white-space: normal;
-  text-align: center;
-  line-height: 1.2;
-  display: -webkit-box;
-  -webkit-line-clamp: 2;
-  -webkit-box-orient: vertical;
-  font-size: 10px;
-}
-.bar[data-orient='v'] .bar-footer-controls {
-  justify-content: center;
 }
 
 /* ─────────────────── AI SETTINGS SECTION ─────────────────── */
@@ -1218,8 +998,8 @@ html, body {
   letter-spacing: 0.02em;
 }
 .ai-key-input:focus {
-  border-color: var(--gold);
-  box-shadow: 0 0 0 2px rgba(216, 181, 114, 0.18);
+  border-color: var(--accent);
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--accent) 18%, transparent);
 }
 
 .ai-key-actions {
@@ -1314,8 +1094,8 @@ html, body {
   outline: none;
 }
 .ai-prompt-textarea:focus {
-  border-color: var(--gold);
-  box-shadow: 0 0 0 2px rgba(216, 181, 114, 0.18);
+  border-color: var(--accent);
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--accent) 18%, transparent);
 }
 
 .ai-disclosure {
@@ -1424,8 +1204,8 @@ html, body {
   word-break: break-word;
 }
 .chat-bubble-user {
-  background: rgba(216, 181, 114, 0.14);
-  border: 1px solid rgba(216, 181, 114, 0.28);
+  background: color-mix(in srgb, var(--accent) 14%, transparent);
+  border: 1px solid color-mix(in srgb, var(--accent) 28%, transparent);
   color: var(--text);
   align-self: flex-end;
   max-width: 90%;
@@ -1490,7 +1270,7 @@ html, body {
   margin: 6px 0 4px 0;
 }
 .chat-markdown a {
-  color: var(--gold);
+  color: var(--accent);
   text-decoration: underline;
   text-decoration-thickness: 1px;
 }
@@ -1518,16 +1298,16 @@ html, body {
   outline: none;
 }
 .chat-input:focus {
-  border-color: var(--gold);
-  box-shadow: 0 0 0 2px rgba(216, 181, 114, 0.18);
+  border-color: var(--accent);
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--accent) 18%, transparent);
 }
 .chat-input[disabled] { opacity: 0.55; cursor: not-allowed; }
 
 .chat-send {
   appearance: none;
   align-self: flex-end;
-  background: linear-gradient(180deg, var(--gold) 0%, var(--gold-strong) 100%);
-  color: var(--gold-text);
+  background: linear-gradient(180deg, var(--accent) 0%, var(--accent-strong) 100%);
+  color: var(--on-accent);
   border: 1px solid rgba(0, 0, 0, 0.25);
   border-radius: 6px;
   padding: 5px 14px;

@@ -15,6 +15,15 @@ export type ToolId =
 
 export type Whiteboard = 'off' | 'white' | 'black';
 
+// Tool groups collapse related tools behind one toolbar button (the
+// button shows the group's last-used tool; a flyout exposes the rest).
+export type GroupId = 'draw' | 'shapes';
+
+// Which flyout card is open on the toolbar. 'draw'/'shapes' list that
+// group's tools; 'color' hosts the palette + thickness chips. Transient
+// hub state — main watches it to grow the toolbar window (v-mode).
+export type FlyoutId = GroupId | 'color';
+
 export type Theme = 'dark' | 'light';
 
 export type ProfileId = 'general' | 'teacher' | 'trader';
@@ -143,7 +152,10 @@ export type HubStateUpdate = {
   theme?: Theme;
   profile?: ProfileId;
   settingsOpen?: boolean;
-  thicknessFlyoutOpen?: boolean;
+  // Which flyout card is open (null = none). Transient — never
+  // persisted. Replaces the old thicknessFlyoutOpen boolean.
+  // (groupLastTool is NOT patchable — hub derives it from activeTool.)
+  flyout?: FlyoutId | null;
   perToolWidth?: Partial<PerToolWidth>;
   saveDir?: string | null;
   alwaysAskSavePath?: boolean;

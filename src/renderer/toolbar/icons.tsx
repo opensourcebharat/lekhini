@@ -252,6 +252,23 @@ export const Icons = {
         <path d="M15 11l4 4-4 4" />
       </>,
     ),
+  // Eye — drawing active (annotations interactive / visible).
+  eye: () =>
+    SVG(
+      <>
+        <path d="M2.5 12S6 5.5 12 5.5 21.5 12 21.5 12 18 18.5 12 18.5 2.5 12 2.5 12z" />
+        <circle cx="12" cy="12" r="3" fill="currentColor" stroke="none" />
+      </>,
+    ),
+  // EyeSlash — drawing paused (click-through / idle).
+  eyeOff: () =>
+    SVG(
+      <>
+        <path d="M2.5 12S6 5.5 12 5.5 21.5 12 21.5 12 18 18.5 12 18.5 2.5 12 2.5 12z" />
+        <circle cx="12" cy="12" r="3" />
+        <path d="M4 20L20 4" />
+      </>,
+    ),
 };
 
 // Look up the user-supplied logo at build/icon.png via Vite's

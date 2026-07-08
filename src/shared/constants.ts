@@ -63,13 +63,15 @@ export const SOLVE_FIRST_TURN =
 // That's what bit users when they restored from the collapsed pill.
 //
 // Rough budget per orientation (sum to current values with margin):
-//   h: titlebar 28 + tools row 56 + footer 28 + borders 2 = ~114
-//      → 140 leaves slack for taller tool rows
-//   v: v-controls 32 + v-brand 52 + tools ~280 + pinned ~96 +
-//      footer 52 + borders 2 = ~514 → 560 with slack
+//   h: micro-strip is inline → one 56px row + borders ≈ 60 → 64
+//      (width: logo 44 + ~11 tool slots ×48 + seps + color cluster
+//      ~200 + strip controls ≈ 820 → 840 with slack)
+//   v: micro-strip 24 + logo 48 + eye 48 + ~7 tool slots ×48 = 336 +
+//      2 separators 18 + 5 action slots ×40 = 200 + color dot 44 +
+//      swatch grid 40 + settings 32 + paddings ≈ 650 → 680 with slack
 export const TOOLBAR_SIZES = {
-  h: { w: 740, h: 140 },
-  v: { w: 88, h: 560 },
+  h: { w: 840, h: 64 },
+  v: { w: 64, h: 680 },
 };
 
 // Extra space added when the settings dropdown is open.
@@ -77,6 +79,17 @@ export const TOOLBAR_SIZES = {
 export const SETTINGS_EXTRA = {
   h: { w: 0, h: 260 },
   v: { w: 260, h: 0 },
+};
+
+// Extra window space claimed while a flyout card is open. Vertical
+// grows sideways so the card can float beside its anchor button
+// (320 fits the widest card: 6 shape tools plus padding). Horizontal
+// flyouts drop below the bar; the renderer includes their height in
+// its content-size report, so no main-side extra is needed — the h
+// value here is only the first-frame estimate before that report.
+export const FLYOUT_EXTRA = {
+  h: { w: 0, h: 72 },
+  v: { w: 320, h: 0 },
 };
 
 export const TOOLBAR_W = TOOLBAR_SIZES.h.w;
@@ -137,3 +150,8 @@ export const COLOR_PRESETS = [
   '#34495e',
   '#95a5a6',
 ];
+
+// Always-visible quick swatches pinned at the toolbar's color cluster —
+// the everyday set. The full COLOR_PRESETS grid (plus custom picker and
+// thickness chips) lives in the color flyout.
+export const PINNED_COLORS = COLOR_PRESETS.slice(0, 6);

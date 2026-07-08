@@ -25,6 +25,12 @@ app.commandLine.appendSwitch('disable-features', 'CalculateNativeWinOcclusion');
 
 const isDev = !!process.env.VITE_DEV_SERVER_URL;
 
+// Dev-only: expose a CDP endpoint so tooling can inspect / screenshot
+// the (capture-protected) toolbar window during development.
+if (isDev) {
+  app.commandLine.appendSwitch('remote-debugging-port', '9222');
+}
+
 if (process.platform === 'darwin' && !isDev) {
   app.dock?.hide();
 }
@@ -70,20 +76,25 @@ app.whenReady().then(async () => {
       registerEscapeWhileDrawing(state.drawMode);
       registerDrawingHotkeys(state.drawMode);
     }
-    // Three panels share the dock slot: settings, status (permission
-    // / save error), and AI chat. Any of them being open means the
-    // toolbar window should grow to fit a side panel.
-    const sidePanelOpen =
-      state.settingsOpen || state.statusPanelOpen || state.chatOpen;
+    // The toolbar window grows beyond the bare bar for either a docked
+    // side panel (settings / status / chat) or a floating flyout card.
+    // Hub keeps them mutually exclusive; panels claim more space.
+    const dock =
+      state.settingsOpen || state.statusPanelOpen || state.chatOpen
+        ? ('panel' as const)
+        : state.flyout !== null
+          ? ('flyout' as const)
+          : ('none' as const);
     if (changed.has('orientation')) {
-      resizeToolbar(state.orientation, state.minimized, sidePanelOpen, 'default');
+      resizeToolbar(state.orientation, state.minimized, dock, 'default');
     } else if (
       changed.has('minimized') ||
       changed.has('settingsOpen') ||
       changed.has('statusPanelOpen') ||
-      changed.has('chatOpen')
+      changed.has('chatOpen') ||
+      changed.has('flyout')
     ) {
-      resizeToolbar(state.orientation, state.minimized, sidePanelOpen, 'keep');
+      resizeToolbar(state.orientation, state.minimized, dock, 'keep');
     }
   });
 
