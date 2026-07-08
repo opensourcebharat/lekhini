@@ -1,6 +1,8 @@
 import { GRAPHITE_COLOR } from '../shared/constants';
+import { GROUP_DEFAULTS } from '../shared/toolGroups';
 import type {
   AiProfileModels,
+  GroupId,
   Orientation,
   ProfileId,
   ProviderId,
@@ -12,9 +14,12 @@ export interface PersistedState {
   orientation: Orientation;
   theme: Theme;
   profile: ProfileId;
-  perToolWidth: { pencil: number; pen: number; eraser: number; highlighter: number };
+  perToolWidth: { pencil: number; pen: number; eraser: number; highlighter: number; shape: number };
   color: string;
   activeTool: ToolId;
+  // Last-used tool per toolbar group (draw / shapes), so each group
+  // button reopens on the user's habitual pick across restarts.
+  groupLastTool: Partial<Record<GroupId, ToolId>>;
   // Save destination for screenshot / snip PNGs. `null` until the
   // first save — the first save shows the OS dialog so the user
   // explicitly picks a folder; that folder is then remembered and
@@ -59,11 +64,14 @@ export const PERSISTED_DEFAULTS: PersistedState = {
   // First-run default is vertical, per design ask. Users can flip to
   // horizontal in Settings and that choice is then remembered.
   orientation: 'v',
-  theme: 'dark',
+  // Light-first per the Epic Pen-style redesign; existing installs keep
+  // their stored choice.
+  theme: 'light',
   profile: 'general',
-  perToolWidth: { pencil: 2, pen: 4, eraser: 20, highlighter: 18 },
+  perToolWidth: { pencil: 2, pen: 4, eraser: 20, highlighter: 18, shape: 2 },
   color: GRAPHITE_COLOR,
   activeTool: 'pencil',
+  groupLastTool: { ...GROUP_DEFAULTS },
   saveDir: null,
   alwaysAskSavePath: false,
   aiActiveProvider: null,

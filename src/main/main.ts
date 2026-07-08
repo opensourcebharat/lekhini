@@ -8,6 +8,7 @@ import {
   syncOverlaysToDisplays,
 } from './windows/overlay';
 import { createToolbar, getToolbar, registerToolbarIpc, resizeToolbar } from './windows/toolbar';
+import { registerFlyoutIpc, syncFlyoutWindow } from './windows/flyout';
 import { registerPermissionsIpc } from './permissions';
 import { registerCaptureIpc } from './capture';
 import { registerAiIpc } from './ai/ipc';
@@ -25,6 +26,12 @@ app.commandLine.appendSwitch('disable-features', 'CalculateNativeWinOcclusion');
 
 const isDev = !!process.env.VITE_DEV_SERVER_URL;
 
+// Dev-only: expose a CDP endpoint so tooling can inspect / screenshot
+// the (capture-protected) toolbar window during development.
+if (isDev) {
+  app.commandLine.appendSwitch('remote-debugging-port', '9222');
+}
+
 if (process.platform === 'darwin' && !isDev) {
   app.dock?.hide();
 }
@@ -40,6 +47,7 @@ app.whenReady().then(async () => {
   registerPermissionsIpc();
   registerCaptureIpc();
   registerToolbarIpc();
+  registerFlyoutIpc();
   registerAiIpc();
   registerRagIpc();
   registerUpdaterIpc();
@@ -70,20 +78,26 @@ app.whenReady().then(async () => {
       registerEscapeWhileDrawing(state.drawMode);
       registerDrawingHotkeys(state.drawMode);
     }
-    // Three panels share the dock slot: settings, status (permission
-    // / save error), and AI chat. Any of them being open means the
-    // toolbar window should grow to fit a side panel.
-    const sidePanelOpen =
-      state.settingsOpen || state.statusPanelOpen || state.chatOpen;
+    // Flyout submenus live in their own child window so the toolbar's
+    // bounds never move when one opens — just show/hide that window.
+    if (changed.has('flyout')) {
+      syncFlyoutWindow(state.flyout !== null);
+    }
+    // The toolbar window itself only grows for a docked side panel
+    // (settings / status / chat).
+    const dock =
+      state.settingsOpen || state.statusPanelOpen || state.chatOpen
+        ? ('panel' as const)
+        : ('none' as const);
     if (changed.has('orientation')) {
-      resizeToolbar(state.orientation, state.minimized, sidePanelOpen, 'default');
+      resizeToolbar(state.orientation, state.minimized, dock, 'default');
     } else if (
       changed.has('minimized') ||
       changed.has('settingsOpen') ||
       changed.has('statusPanelOpen') ||
       changed.has('chatOpen')
     ) {
-      resizeToolbar(state.orientation, state.minimized, sidePanelOpen, 'keep');
+      resizeToolbar(state.orientation, state.minimized, dock, 'keep');
     }
   });
 

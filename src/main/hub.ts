@@ -1,10 +1,13 @@
 import { BrowserWindow, ipcMain } from 'electron';
-import { DEFAULT_SETTINGS, GRAPHITE_COLOR } from '../shared/constants';
+import { DEFAULT_SETTINGS, GRAPHITE_COLOR, SHAPE_WIDTH_TOOLS } from '../shared/constants';
 import { DEFAULT_PROFILE } from '../shared/profiles';
+import { GROUPS, GROUP_DEFAULTS, GROUP_IDS, groupOf } from '../shared/toolGroups';
 import { persisted, PERSISTED_DEFAULTS, save } from './persistence';
 import type {
   AiProfileModels,
   Calibration,
+  FlyoutId,
+  GroupId,
   HubStateUpdate,
   Orientation,
   PerToolWidth,
@@ -27,7 +30,14 @@ export interface HubState {
   theme: Theme;
   profile: ProfileId;
   settingsOpen: boolean;
-  thicknessFlyoutOpen: boolean;
+  // Open flyout card (draw / shapes / color), null when none. Transient
+  // — never persisted. Main grows the toolbar window while one is open.
+  flyout: FlyoutId | null;
+  // Last-used tool per toolbar group. Persisted; updated centrally in
+  // patch() whenever activeTool lands on a grouped tool, so hotkeys,
+  // overlay-driven changes, and toolbar clicks all keep the group
+  // buttons honest.
+  groupLastTool: Partial<Record<GroupId, ToolId>>;
   perToolWidth: PerToolWidth;
   saveDir: string | null;
   alwaysAskSavePath: boolean;
@@ -66,11 +76,12 @@ const state: HubState = {
   orientation: 'h',
   minimized: false,
   whiteboard: 'off',
-  theme: 'dark',
+  theme: 'light',
   profile: DEFAULT_PROFILE,
   settingsOpen: false,
-  thicknessFlyoutOpen: false,
-  perToolWidth: { pencil: 3, pen: 4, eraser: 20, highlighter: 18 },
+  flyout: null,
+  groupLastTool: { ...GROUP_DEFAULTS },
+  perToolWidth: { pencil: 3, pen: 4, eraser: 20, highlighter: 18, shape: 2 },
   saveDir: null,
   alwaysAskSavePath: false,
   statusPanelOpen: false,
@@ -95,6 +106,15 @@ const listeners = new Set<(state: HubState, changed: Set<keyof HubState>) => voi
 
 const TRACKED_TOOLS = new Set<ToolId>(['pencil', 'pen', 'eraser', 'highlighter']);
 type TrackedTool = 'pencil' | 'pen' | 'eraser' | 'highlighter';
+
+// The perToolWidth slot a tool's width persists under: draw tools have
+// their own slot; the stroked shapes share 'shape'. Null for tools with
+// no width (hand, text, snip, region, fib).
+function widthSlot(tool: ToolId): keyof PerToolWidth | null {
+  if (TRACKED_TOOLS.has(tool)) return tool as TrackedTool;
+  if (SHAPE_WIDTH_TOOLS.has(tool)) return 'shape';
+  return null;
+}
 
 export function subscribe(win: BrowserWindow) {
   subscribers.add(win);
@@ -144,8 +164,19 @@ export function hydrateFromPersistence(): void {
     pen:         typeof storedW.pen         === 'number' ? storedW.pen         : PERSISTED_DEFAULTS.perToolWidth.pen,
     eraser:      typeof storedW.eraser      === 'number' ? storedW.eraser      : PERSISTED_DEFAULTS.perToolWidth.eraser,
     highlighter: typeof storedW.highlighter === 'number' ? storedW.highlighter : PERSISTED_DEFAULTS.perToolWidth.highlighter,
+    shape:       typeof storedW.shape       === 'number' ? storedW.shape       : PERSISTED_DEFAULTS.perToolWidth.shape,
   };
   state.activeTool = VALID_TOOLS.has(p.activeTool) ? p.activeTool : 'pencil';
+  // Last-used tool per group — schema-tolerant: accept only known group
+  // keys whose value is actually a member of that group; anything else
+  // (older installs, drifted records) falls back to the default.
+  const storedG = (p.groupLastTool ?? {}) as Partial<Record<GroupId, ToolId>>;
+  const validG: Partial<Record<GroupId, ToolId>> = { ...GROUP_DEFAULTS };
+  for (const gid of GROUP_IDS) {
+    const t = storedG[gid];
+    if (t && GROUPS[gid].includes(t)) validG[gid] = t;
+  }
+  state.groupLastTool = validG;
   // Save destination: null until the user picks one. Schema-tolerant —
   // older installs without this key fall through to the default.
   state.saveDir = typeof p.saveDir === 'string' ? p.saveDir : null;
@@ -187,9 +218,8 @@ export function hydrateFromPersistence(): void {
   // don't restore a stray non-graphite value from a previous session.
   const colorForTool =
     state.activeTool === 'pencil' ? GRAPHITE_COLOR : p.color;
-  const restoredWidth = TRACKED_TOOLS.has(state.activeTool)
-    ? state.perToolWidth[state.activeTool as TrackedTool]
-    : undefined;
+  const hydratedSlot = widthSlot(state.activeTool);
+  const restoredWidth = hydratedSlot ? state.perToolWidth[hydratedSlot] : undefined;
   state.settings = {
     ...state.settings,
     color: colorForTool,
@@ -204,19 +234,31 @@ export function patch(update: HubStateUpdate) {
     state.activeTool = update.activeTool;
     changed.add('activeTool');
     save('activeTool', state.activeTool);
-    // Switching to a tracked tool (pencil/pen/eraser/highlighter) restores
-    // that tool's saved width. Only restore when a real value is stored —
-    // never overwrite settings.width with undefined.
-    if (TRACKED_TOOLS.has(state.activeTool)) {
-      const saved = state.perToolWidth[state.activeTool as TrackedTool];
+    // Switching tools restores that tool's saved width (draw tools have
+    // their own slot; stroked shapes share the thin 'shape' slot — so a
+    // 20px eraser width never bleeds into a 20px line). Only restore
+    // when a real value is stored.
+    const slot = widthSlot(state.activeTool);
+    if (slot) {
+      const saved = state.perToolWidth[slot];
       if (typeof saved === 'number' && saved !== state.settings.width) {
         state.settings = { ...state.settings, width: saved };
         changed.add('settings');
       }
-    } else if (state.thicknessFlyoutOpen) {
-      // Switched away from a tool that owns the flyout — close it.
-      state.thicknessFlyoutOpen = false;
-      changed.add('thicknessFlyoutOpen');
+    }
+    // Remember the pick on its group so the group button shows it —
+    // centralised here so hotkeys / overlay / toolbar all count.
+    const group = groupOf(state.activeTool);
+    if (group && state.groupLastTool[group] !== state.activeTool) {
+      state.groupLastTool = { ...state.groupLastTool, [group]: state.activeTool };
+      changed.add('groupLastTool');
+      save('groupLastTool', state.groupLastTool);
+    }
+    // A tool pick closes any open tool-group flyout (the color flyout
+    // stays — its palette applies to every tool).
+    if (state.flyout === 'draw' || state.flyout === 'shapes') {
+      state.flyout = null;
+      changed.add('flyout');
     }
     // Pencil is locked to graphite — selecting it always resets color.
     // This is what makes "change the color → become a pen" a natural,
@@ -236,15 +278,15 @@ export function patch(update: HubStateUpdate) {
       update.settings.color !== undefined && update.settings.color !== state.settings.color;
     state.settings = { ...state.settings, ...update.settings };
     changed.add('settings');
-    // If width changed while a tracked tool is active, mirror it into
-    // per-tool memory so re-selecting the tool restores this thickness.
-    if (
-      update.settings.width !== undefined &&
-      TRACKED_TOOLS.has(state.activeTool)
-    ) {
-      const tool = state.activeTool as TrackedTool;
-      if (state.perToolWidth[tool] !== update.settings.width) {
-        state.perToolWidth = { ...state.perToolWidth, [tool]: update.settings.width };
+    // If width changed while a width-tracked tool is active, mirror it
+    // into per-tool memory so re-selecting the tool restores it.
+    const widthSlotForActive = widthSlot(state.activeTool);
+    if (update.settings.width !== undefined && widthSlotForActive) {
+      if (state.perToolWidth[widthSlotForActive] !== update.settings.width) {
+        state.perToolWidth = {
+          ...state.perToolWidth,
+          [widthSlotForActive]: update.settings.width,
+        };
         changed.add('perToolWidth');
         save('perToolWidth', state.perToolWidth);
       }
@@ -274,9 +316,9 @@ export function patch(update: HubStateUpdate) {
     changed.add('perToolWidth');
     save('perToolWidth', state.perToolWidth);
     // If the active tool's width was just updated, mirror into settings.
-    if (TRACKED_TOOLS.has(state.activeTool)) {
-      const tool = state.activeTool as TrackedTool;
-      const w = state.perToolWidth[tool];
+    const slot2 = widthSlot(state.activeTool);
+    if (slot2) {
+      const w = state.perToolWidth[slot2];
       if (typeof w === 'number' && w !== state.settings.width) {
         state.settings = { ...state.settings, width: w };
         changed.add('settings');
@@ -295,6 +337,12 @@ export function patch(update: HubStateUpdate) {
   if (update.minimized !== undefined && update.minimized !== state.minimized) {
     state.minimized = update.minimized;
     changed.add('minimized');
+    // Collapsing to the pill unmounts the flyout card — drop the state
+    // too so the restored window isn't sized for a card that's gone.
+    if (state.minimized && state.flyout !== null) {
+      state.flyout = null;
+      changed.add('flyout');
+    }
   }
   if (update.whiteboard !== undefined && update.whiteboard !== state.whiteboard) {
     state.whiteboard = update.whiteboard;
@@ -316,9 +364,9 @@ export function patch(update: HubStateUpdate) {
     // The dock slot holds AT MOST ONE of: settings, status panel,
     // chat panel, thickness flyout. Opening settings closes the rest.
     if (state.settingsOpen) {
-      if (state.thicknessFlyoutOpen) {
-        state.thicknessFlyoutOpen = false;
-        changed.add('thicknessFlyoutOpen');
+      if (state.flyout !== null) {
+        state.flyout = null;
+        changed.add('flyout');
       }
       if (state.statusPanelOpen) {
         state.statusPanelOpen = false;
@@ -330,15 +378,24 @@ export function patch(update: HubStateUpdate) {
       }
     }
   }
-  if (
-    update.thicknessFlyoutOpen !== undefined &&
-    update.thicknessFlyoutOpen !== state.thicknessFlyoutOpen
-  ) {
-    state.thicknessFlyoutOpen = update.thicknessFlyoutOpen;
-    changed.add('thicknessFlyoutOpen');
-    if (state.thicknessFlyoutOpen && state.settingsOpen) {
-      state.settingsOpen = false;
-      changed.add('settingsOpen');
+  if (update.flyout !== undefined && update.flyout !== state.flyout) {
+    state.flyout = update.flyout;
+    changed.add('flyout');
+    // Flyouts and the dock-slot panels are mutually exclusive — both
+    // grow the window width in v-mode and would fight over it.
+    if (state.flyout !== null) {
+      if (state.settingsOpen) {
+        state.settingsOpen = false;
+        changed.add('settingsOpen');
+      }
+      if (state.statusPanelOpen) {
+        state.statusPanelOpen = false;
+        changed.add('statusPanelOpen');
+      }
+      if (state.chatOpen) {
+        state.chatOpen = false;
+        changed.add('chatOpen');
+      }
     }
   }
   if (update.saveDir !== undefined && update.saveDir !== state.saveDir) {
@@ -370,6 +427,10 @@ export function patch(update: HubStateUpdate) {
         state.chatOpen = false;
         changed.add('chatOpen');
       }
+      if (state.flyout !== null) {
+        state.flyout = null;
+        changed.add('flyout');
+      }
     }
   }
   if (update.chatOpen !== undefined && update.chatOpen !== state.chatOpen) {
@@ -384,6 +445,10 @@ export function patch(update: HubStateUpdate) {
       if (state.statusPanelOpen) {
         state.statusPanelOpen = false;
         changed.add('statusPanelOpen');
+      }
+      if (state.flyout !== null) {
+        state.flyout = null;
+        changed.add('flyout');
       }
     }
   }

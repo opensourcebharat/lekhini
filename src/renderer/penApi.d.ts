@@ -81,6 +81,10 @@ declare global {
           cb: (payload: { message: string; recoverable: boolean }) => void,
         ): () => void;
       };
+      flyout: {
+        setAnchor(rect: { x: number; y: number; w: number; h: number }): Promise<void>;
+        setSize(size: { w: number; h: number }): Promise<void>;
+      };
       settings: {
         pickSaveDir(): Promise<string | null>;
       };

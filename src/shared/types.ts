@@ -15,6 +15,15 @@ export type ToolId =
 
 export type Whiteboard = 'off' | 'white' | 'black';
 
+// Tool groups collapse related tools behind one toolbar button (the
+// button shows the group's last-used tool; a flyout exposes the rest).
+export type GroupId = 'draw' | 'shapes';
+
+// Which flyout card is open on the toolbar. 'draw'/'shapes' list that
+// group's tools; 'color' hosts the palette + thickness chips. Transient
+// hub state — main watches it to grow the toolbar window (v-mode).
+export type FlyoutId = GroupId | 'color';
+
 export type Theme = 'dark' | 'light';
 
 export type ProfileId = 'general' | 'teacher' | 'trader';
@@ -128,6 +137,10 @@ export interface PerToolWidth {
   pen: number;
   eraser: number;
   highlighter: number;
+  // Shared width for the stroked shapes (line / trendline / arrow /
+  // ellipse) — they want hairline-to-thin strokes, not the fat widths
+  // the draw tools use, so they remember their own value.
+  shape: number;
 }
 
 export type Orientation = 'h' | 'v';
@@ -143,7 +156,10 @@ export type HubStateUpdate = {
   theme?: Theme;
   profile?: ProfileId;
   settingsOpen?: boolean;
-  thicknessFlyoutOpen?: boolean;
+  // Which flyout card is open (null = none). Transient — never
+  // persisted. Replaces the old thicknessFlyoutOpen boolean.
+  // (groupLastTool is NOT patchable — hub derives it from activeTool.)
+  flyout?: FlyoutId | null;
   perToolWidth?: Partial<PerToolWidth>;
   saveDir?: string | null;
   alwaysAskSavePath?: boolean;
@@ -342,6 +358,11 @@ export type IpcChannel =
   | 'window:platform'
   | 'toolbar:on-right-side'
   | 'toolbar:set-content-size'
+  // Flyout child window: the toolbar reports the anchor button's
+  // window-relative rect before opening; the flyout page reports its
+  // rendered content size so main can size + place the window.
+  | 'flyout:anchor'
+  | 'flyout:set-size'
   | 'app:info'
   // Auto-update (electron-updater → GitHub Releases). `get` returns the
   // current snapshot; `check` forces a check; `install` quits and

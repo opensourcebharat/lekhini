@@ -63,13 +63,15 @@ export const SOLVE_FIRST_TURN =
 // That's what bit users when they restored from the collapsed pill.
 //
 // Rough budget per orientation (sum to current values with margin):
-//   h: titlebar 28 + tools row 56 + footer 28 + borders 2 = ~114
-//      → 140 leaves slack for taller tool rows
-//   v: v-controls 32 + v-brand 52 + tools ~280 + pinned ~96 +
-//      footer 52 + borders 2 = ~514 → 560 with slack
+//   h: micro-strip is inline → one 56px row + borders ≈ 60 → 64
+//      (width: logo 44 + ~11 tool slots ×48 + seps + color cluster
+//      ~200 + strip controls ≈ 820 → 840 with slack)
+//   v: micro-strip 24 + logo 48 + eye 48 + ~7 tool slots ×48 = 336 +
+//      2 separators 18 + 5 action slots ×40 = 200 + color dot 44 +
+//      swatch grid 40 + settings 32 + paddings ≈ 650 → 680 with slack
 export const TOOLBAR_SIZES = {
-  h: { w: 740, h: 140 },
-  v: { w: 88, h: 560 },
+  h: { w: 840, h: 64 },
+  v: { w: 64, h: 680 },
 };
 
 // Extra space added when the settings dropdown is open.
@@ -78,6 +80,7 @@ export const SETTINGS_EXTRA = {
   h: { w: 0, h: 260 },
   v: { w: 260, h: 0 },
 };
+
 
 export const TOOLBAR_W = TOOLBAR_SIZES.h.w;
 export const TOOLBAR_H = TOOLBAR_SIZES.h.h;
@@ -114,14 +117,27 @@ export const TOOL_HOTKEYS: Record<string, ToolId> = {
 // with a sane progression in between. Pencil leans fine; pen has a bit
 // more body since it reads as ink rather than graphite.
 export const THICKNESS_PRESETS: Record<
-  'pencil' | 'pen' | 'eraser' | 'highlighter',
+  'pencil' | 'pen' | 'eraser' | 'highlighter' | 'shape',
   number[]
 > = {
   pencil: [0.5, 1, 2, 3, 6],
   pen: [2, 4, 8, 14, 22],
   eraser: [10, 18, 28, 44, 64],
   highlighter: [12, 18, 26, 34, 44],
+  // Stroked shapes (line/trendline/arrow/ellipse) read as outlines, so
+  // the whole scale sits far thinner than the draw tools.
+  shape: [1, 2, 3, 5],
 };
+
+// Tools whose stroke width is the shared 'shape' slot in PerToolWidth.
+// (region draws without a width; fib has fixed level lines; text sizes
+// by font.)
+export const SHAPE_WIDTH_TOOLS = new Set<ToolId>([
+  'line',
+  'trendline',
+  'arrow',
+  'ellipse',
+]);
 
 export const COLOR_PRESETS = [
   '#1c1c1e',
@@ -137,3 +153,8 @@ export const COLOR_PRESETS = [
   '#34495e',
   '#95a5a6',
 ];
+
+// Always-visible quick swatches pinned at the toolbar's color cluster —
+// the everyday set. The full COLOR_PRESETS grid (plus custom picker and
+// thickness chips) lives in the color flyout.
+export const PINNED_COLORS = COLOR_PRESETS.slice(0, 6);
