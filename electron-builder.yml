@@ -54,6 +54,13 @@ mac:
   gatekeeperAssess: false
   entitlements: build/entitlements.mac.plist
   entitlementsInherit: build/entitlements.mac.plist
+  # Notarize after signing (required for Gatekeeper — a Developer ID
+  # signature alone still shows "Apple could not verify…" on download).
+  # Reads APPLE_ID / APPLE_APP_SPECIFIC_PASSWORD / APPLE_TEAM_ID, which
+  # the release workflow exports from repo secrets. When those are absent
+  # (secretless/unsigned build) electron-builder logs "skipped macOS
+  # notarization" and continues, so this stays safe either way.
+  notarize: true
   extendInfo:
     NSScreenCaptureUsageDescription: Lekhini captures the screen only when you save an annotated screenshot.
     NSAccessibilityUsageDescription: Lekhini uses Accessibility to register global hotkeys (e.g., toggle draw mode) while other apps are focused.

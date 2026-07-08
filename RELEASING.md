@@ -78,13 +78,64 @@ publishes the GitHub Release. You do not build or upload anything by hand.
 4. Watch it at <https://github.com/opensourcebharat/lekhini/actions>.
    When green, the release is live and installed apps will auto-update.
 
-### macOS signing (optional)
+### macOS signing & notarization
 
-The workflow signs + notarizes macOS builds **only when** these repo
-secrets exist; otherwise the macOS build is unsigned (and macOS
-auto-update stays disabled until they're added — Windows/Linux are
-unaffected): `CSC_LINK`, `CSC_KEY_PASSWORD`, `APPLE_ID`,
-`APPLE_APP_SPECIFIC_PASSWORD`, `APPLE_TEAM_ID`.
+The workflow signs + notarizes macOS builds **only when** the repo
+secrets below exist; otherwise the macOS build is unsigned. **Unsigned
+builds are effectively unusable for end users**: macOS quarantines every
+browser download, and Gatekeeper then shows *"Apple could not verify
+'Lekhini' is free of malware"* or *" 'Lekhini' is damaged and can't be
+opened"* — the file is fine, but macOS refuses to run it. Signing +
+notarization is what removes those dialogs (and it also unlocks macOS
+auto-update, which Squirrel.Mac refuses for unsigned apps).
+
+One-time setup (needs an [Apple Developer Program](https://developer.apple.com/programs/)
+membership, US$99/year, on the org's Apple ID):
+
+1. **Create a "Developer ID Application" certificate.**
+   Easiest via Xcode: *Xcode → Settings → Accounts → (your Apple ID) →
+   Manage Certificates… → + → Developer ID Application*. Alternatively
+   create it at
+   [developer.apple.com/account/resources/certificates](https://developer.apple.com/account/resources/certificates/list)
+   using a CSR from Keychain Access (*Certificate Assistant → Request a
+   Certificate from a Certificate Authority*).
+2. **Export it as a `.p12`.** In Keychain Access, find the
+   `Developer ID Application: …` certificate (expand it so the private
+   key is included), right-click → *Export*, format *Personal
+   Information Exchange (.p12)*, and set a strong export password.
+3. **Get an app-specific password** for notarization:
+   [account.apple.com](https://account.apple.com) → *Sign-In and
+   Security → App-Specific Passwords → +*.
+4. **Find your Team ID**: [developer.apple.com/account](https://developer.apple.com/account)
+   → *Membership details* (10-character ID like `AB12CD34EF`).
+5. **Set the five repo secrets** (from the repo root):
+   ```bash
+   base64 -i DeveloperID.p12 | gh secret set CSC_LINK --repo opensourcebharat/lekhini
+   gh secret set CSC_KEY_PASSWORD --repo opensourcebharat/lekhini --body 'the .p12 export password'
+   gh secret set APPLE_ID --repo opensourcebharat/lekhini --body 'appleid@example.com'
+   gh secret set APPLE_APP_SPECIFIC_PASSWORD --repo opensourcebharat/lekhini --body 'xxxx-xxxx-xxxx-xxxx'
+   gh secret set APPLE_TEAM_ID --repo opensourcebharat/lekhini --body 'AB12CD34EF'
+   ```
+6. **Cut a release** (any bump). The workflow detects `CSC_LINK`, signs
+   with the hardened runtime + entitlements, notarizes with Apple, and
+   staples the ticket. Verify a downloaded artifact with:
+   ```bash
+   spctl -a -vv /Applications/Lekhini.app   # → "accepted, source=Notarized Developer ID"
+   ```
+
+Until the secrets exist, the release workflow prints an **"Unsigned
+macOS build"** warning in the run summary. Users stuck with an unsigned
+build can bypass Gatekeeper at their own discretion with
+`xattr -cr /Applications/Lekhini.app` — a stopgap, not a fix.
+
+### Windows signing (future)
+
+Windows builds are currently unsigned, so SmartScreen shows
+"Windows protected your PC" until enough reputation accrues. Fixing
+that requires an OV/EV code-signing certificate or
+[Azure Trusted Signing](https://learn.microsoft.com/en-us/azure/trusted-signing/);
+electron-builder supports both once credentials exist. Linux needs no
+signing.
 
 ### Local build (optional)
 

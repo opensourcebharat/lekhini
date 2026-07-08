@@ -63,6 +63,21 @@ jobs:
             echo "APPLE_TEAM_ID=${{ secrets.APPLE_TEAM_ID }}"
           } >> "$GITHUB_ENV"
 
+      # Make an unsigned macOS release impossible to miss: downloads of
+      # unsigned builds are blocked by Gatekeeper ("Apple could not
+      # verify…" / "damaged and can't be opened"), so warn loudly in the
+      # run summary until the signing secrets are configured.
+      - name: Warn if building unsigned macOS installers
+        if: runner.os == 'macOS' && env.MAC_SIGN != 'true'
+        run: |
+          echo "::warning title=Unsigned macOS build::CSC_LINK is not configured — this release's macOS installers will be UNSIGNED and Gatekeeper will block them for users. See RELEASING.md → 'macOS signing & notarization'."
+          {
+            echo "## ⚠️ Unsigned macOS build"
+            echo "No signing secrets configured (\`CSC_LINK\` missing)."
+            echo "Users will see **'Apple could not verify this app is free of malware'** or **'damaged and can't be opened'**."
+            echo "Set up signing per \`RELEASING.md\` → *macOS signing & notarization*."
+          } >> "$GITHUB_STEP_SUMMARY"
+
       - name: Build and publish to the draft release
         run: npm run release:ci
         env:
