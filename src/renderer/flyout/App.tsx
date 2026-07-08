@@ -45,19 +45,21 @@ export function FlyoutWindowApp() {
 
   // Report the rendered card size so main can fit + place the window.
   // Runs after every render of the card (flyout id, profile, or tool
-  // changes can all alter its dimensions).
+  // changes can all alter its dimensions). Measured SYNCHRONOUSLY:
+  // Solid has already committed the DOM when effects run, and reading
+  // offsetWidth forces layout. Never defer this behind rAF/timers —
+  // the window is HIDDEN at this point (main only shows it once this
+  // report arrives) and hidden windows may not run scheduled frames.
   createEffect(() => {
     const s = hub();
     if (!s || s.flyout === null) return;
     // Track everything that can change the card's size.
     void s.profile;
     void s.activeTool;
-    requestAnimationFrame(() => {
-      if (!cardEl) return;
-      void window.pen.flyout.setSize({
-        w: Math.ceil(cardEl.offsetWidth),
-        h: Math.ceil(cardEl.offsetHeight),
-      });
+    if (!cardEl) return;
+    void window.pen.flyout.setSize({
+      w: Math.ceil(cardEl.offsetWidth),
+      h: Math.ceil(cardEl.offsetHeight),
     });
   });
 

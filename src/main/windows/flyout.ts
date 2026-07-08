@@ -44,6 +44,11 @@ function createFlyoutWindow(): BrowserWindow {
       preload: path.join(__dirname, '../preload/preload.js'),
       contextIsolation: true,
       nodeIntegration: false,
+      // The window spends its life hidden between opens. Without this,
+      // Chromium suspends timers/rAF while hidden and the size report
+      // that gates showing the card never fires — the second open
+      // would deadlock invisible.
+      backgroundThrottling: false,
     },
   });
   win.setAlwaysOnTop(true, 'screen-saver', 3);
