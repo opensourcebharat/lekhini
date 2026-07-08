@@ -7,6 +7,31 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Toolbar redesign (new)
+- **Epic Pen-style toolbar** — clean, light-first single-column bar
+  (single-row in horizontal mode) with large flat buttons and one vivid
+  accent marking the active tool. Dark theme kept as a variant.
+- **Tool groups** — draw (pencil / pen / highlighter) and shapes (line /
+  trendline / arrow / rectangle / ellipse / fibonacci) collapse behind
+  corner-triangle buttons showing your last-used tool (remembered across
+  restarts). Click the icon to use it; click the corner, re-click, or
+  long-press to open the group's submenu.
+- **Submenus open in their own floating card** beside the bar — the
+  toolbar itself never moves or resizes, and the card never steals
+  focus from the app you're annotating.
+- **Color cluster** — a current-color dot opens the palette + thickness
+  card; six quick swatches stay pinned on the bar.
+- **Simpler chrome** — an eye button toggles drawing on/off, native
+  tooltips replace the footer hint strip, saves confirm via a small
+  click-to-reveal toast, and the settings gear is pinned at the end.
+
+### Fixed
+- Shapes (line / trendline / arrow / ellipse) no longer inherit the fat
+  draw-tool widths — they keep their own thin stroke width (default
+  2px) with a matching preset scale.
+- First click on the toolbar or a submenu now always registers (macOS
+  no longer swallows it for window activation).
+
 ## [1.1.1] — 2026-07-08
 
 ### Fixed
