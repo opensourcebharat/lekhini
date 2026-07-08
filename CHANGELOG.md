@@ -7,6 +7,34 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+- **Linux/Wayland capture** — screenshots on multi-monitor Wayland could
+  grab the wrong display (`display_id` is empty under the PipeWire
+  portal); capture now falls back to positional display matching.
+- Capture failures on Windows/Linux now surface an error message instead
+  of failing silently (the permission panel only exists on macOS).
+- Overlay and toolbar re-assert always-on-top on Windows/Linux, where
+  the macOS-only `screen-saver` window level doesn't apply and other
+  topmost windows could cover them.
+- Saved-path hint now shortens Windows home folders (`C:\Users\…`) too.
+
+### Changed
+- Keyboard-shortcut hints adapt to the platform — `Ctrl+Z`, `Ctrl+Enter`
+  etc. on Windows/Linux instead of hardcoded macOS glyphs (`⌘⇧Z`).
+- Native-looking fonts on every OS (system-ui first: SF Pro / Segoe UI /
+  Ubuntu…), with a matching cross-platform monospace stack.
+- Settings and chat panels use thin, theme-tinted scrollbars.
+- Hairline borders rounded to whole pixels so they survive 125%/150%
+  display scaling on Windows.
+- AI chat answers, saved file paths, and error messages are now
+  selectable/copyable.
+
+### Accessibility (new)
+- Keyboard focus rings on all toolbar controls (`:focus-visible`).
+- Color swatches are real buttons, keyboard-reachable with ARIA labels;
+  icon-only buttons gained ARIA labels.
+- `prefers-reduced-motion` disables pulse animations and transitions.
+
 ## [1.1.0] — 2026-05-29
 
 ### AI (new)
