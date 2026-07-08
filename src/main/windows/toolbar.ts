@@ -63,6 +63,10 @@ export function createToolbar(orientation: Orientation = 'h'): BrowserWindow {
     fullscreenable: false,
     skipTaskbar: true,
     show: true,
+    // The toolbar is almost always clicked while another app has
+    // focus — accept that first click as a real click instead of
+    // letting macOS use it purely for activation.
+    acceptFirstMouse: true,
     backgroundColor: '#00000000',
     webPreferences: {
       preload: path.join(__dirname, '../preload/preload.js'),

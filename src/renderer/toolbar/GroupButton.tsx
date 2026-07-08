@@ -54,6 +54,15 @@ export function GroupButton(props: Props) {
     if (props.active) props.onOpenFlyout();
     else props.onSelect();
   };
+  // The corner triangle is a dedicated "open the menu" target — it
+  // must work on the FIRST click regardless of whether the group is
+  // active (clicking the icon body selects; clicking the corner opens).
+  const onCornerClick = (e: MouseEvent) => {
+    e.stopPropagation();
+    cancelPress();
+    longPressed = false;
+    props.onOpenFlyout();
+  };
   onCleanup(cancelPress);
 
   return (
@@ -70,7 +79,7 @@ export function GroupButton(props: Props) {
       aria-expanded={props.open}
     >
       {props.children}
-      <span class="group-corner" aria-hidden="true" />
+      <span class="group-corner" onClick={onCornerClick} aria-hidden="true" />
     </button>
   );
 }

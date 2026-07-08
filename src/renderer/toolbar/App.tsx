@@ -548,12 +548,12 @@ export function ToolbarApp() {
       if (t.closest('.flyout-card, .group-btn, .color-dot')) return;
       closeFlyout();
     };
-    const onWinBlur = () => {
-      if (hub().flyout !== null) closeFlyout();
-    };
+    // NOTE: no window-blur dismissal here — opening the flyout moves
+    // focus between our own windows, and closing on that blur killed
+    // the card mid-click. Main watches app-wide focus instead
+    // (see windows/flyout.ts) and closes only when focus leaves the app.
     window.addEventListener('keydown', onKey);
     window.addEventListener('pointerdown', onDocDown, true);
-    window.addEventListener('blur', onWinBlur);
 
     onCleanup(() => {
       el.removeEventListener('pointerdown', onDown);
@@ -561,7 +561,6 @@ export function ToolbarApp() {
       el.removeEventListener('pointerup', onUp);
       window.removeEventListener('keydown', onKey);
       window.removeEventListener('pointerdown', onDocDown, true);
-      window.removeEventListener('blur', onWinBlur);
     });
   });
 

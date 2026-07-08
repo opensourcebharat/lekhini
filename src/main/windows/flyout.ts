@@ -1,4 +1,4 @@
-import { BrowserWindow, ipcMain, screen } from 'electron';
+import { app, BrowserWindow, ipcMain, screen } from 'electron';
 import path from 'node:path';
 import { getState, patch, subscribe } from '../hub';
 import { getToolbar } from './toolbar';
@@ -35,6 +35,10 @@ function createFlyoutWindow(): BrowserWindow {
     fullscreenable: false,
     skipTaskbar: true,
     show: false,
+    // The card is shown inactive; without this, macOS swallows the
+    // FIRST click (it only activates the window) and tool picks feel
+    // like they randomly don't register.
+    acceptFirstMouse: true,
     backgroundColor: '#00000000',
     webPreferences: {
       preload: path.join(__dirname, '../preload/preload.js'),
@@ -51,12 +55,6 @@ function createFlyoutWindow(): BrowserWindow {
   } else {
     win.loadFile(path.join(__dirname, '../../dist/src/renderer/flyout/index.html'));
   }
-
-  // Clicking away into another app dismisses the open card (the
-  // toolbar renderer separately handles clicks inside the toolbar).
-  win.on('blur', () => {
-    if (getState().flyout !== null) patch({ flyout: null });
-  });
 
   subscribe(win);
   win.once('closed', () => (flyout = null));
@@ -105,6 +103,18 @@ export function syncFlyoutWindow(open: boolean): void {
 }
 
 export function registerFlyoutIpc(): void {
+  // Dismiss the open card when focus leaves the app entirely (the user
+  // clicked into another application). A per-window blur handler is the
+  // wrong tool here: focus hopping between the toolbar and the flyout
+  // window is normal while interacting with the card, and closing on
+  // those transitions made opens flaky and swallowed clicks. The
+  // deferred check lets the sibling window's focus event land first.
+  app.on('browser-window-blur', () => {
+    setTimeout(() => {
+      if (getState().flyout === null) return;
+      if (BrowserWindow.getFocusedWindow() === null) patch({ flyout: null });
+    }, 120);
+  });
   ipcMain.handle('flyout:anchor', (_evt, rect: { x: number; y: number; w: number; h: number }) => {
     anchor = rect;
   });
