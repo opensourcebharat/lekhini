@@ -24,6 +24,12 @@ directories:
   output: release
   buildResources: build
 
+# Ad-hoc sign macOS bundles so even certificate-less builds have a valid
+# code identity — without one, TCC permission grants (Screen Recording)
+# never apply to the running app. Overwritten by the real Developer ID
+# signature when signing secrets are configured. See the hook's comments.
+afterPack: scripts/adhocSign.cjs
+
 files:
   - dist
   - dist-electron
