@@ -4,16 +4,39 @@
 
 * { box-sizing: border-box; }
 
+/* Cross-platform font stacks: system-ui resolves to the native UI font
+   everywhere (SF Pro / Segoe UI / Ubuntu…); the explicit names behind
+   it are fallbacks for older Chromium quirks. Same idea for mono —
+   never assume SF Mono / Menlo exist off macOS. */
+:root {
+  --font-ui:
+    system-ui, -apple-system, "SF Pro Text", "Segoe UI Variable", "Segoe UI",
+    Roboto, Ubuntu, Cantarell, "Noto Sans", "Inter", sans-serif;
+  --font-mono:
+    ui-monospace, "SF Mono", Menlo, "Cascadia Code", Consolas,
+    "JetBrains Mono", "DejaVu Sans Mono", monospace;
+}
+
 html, body {
   margin: 0;
   padding: 0;
   background: transparent;
-  font-family: -apple-system, "SF Pro Text", "Inter", system-ui, sans-serif;
+  font-family: var(--font-ui);
   user-select: none;
   -webkit-user-select: none;
   overflow: hidden;
   font-size: 12px;
   letter-spacing: 0.005em;
+}
+
+/* Respect the OS-level reduced-motion setting — kill the infinite
+   pulses and decorative transitions. */
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
 }
 
 #root { width: 100vw; height: 100vh; }
@@ -362,7 +385,7 @@ html, body {
 .bar[data-orient='h'] .color-grid .swatch {
   width: 14px;
   height: 14px;
-  border-width: 1.2px;
+  border-width: 1px;
 }
 .bar[data-orient='h'] .color-grid .hex-pick {
   width: 14px;
@@ -422,9 +445,22 @@ html, body {
   gap: 4px;
   justify-content: center;
 }
-.bar[data-orient='v'] .swatch { width: 14px; height: 14px; border-width: 1.2px; }
+.bar[data-orient='v'] .swatch { width: 14px; height: 14px; border-width: 1px; }
 .bar[data-orient='v'] .hex-pick { width: 14px; height: 14px; }
 .bar[data-orient='v'] .hex-glyph { font-size: 11px; }
+
+/* ── Keyboard focus ── */
+/* Gold ring on keyboard focus only (:focus-visible skips mouse clicks),
+   matching the ring text inputs already get. :where() keeps specificity
+   at zero so component states still win. */
+:where(button, select, a, .swatch, .hex-pick):focus-visible {
+  outline: 2px solid var(--gold);
+  outline-offset: 1px;
+}
+.hex-pick:focus-within {
+  outline: 2px solid var(--gold);
+  outline-offset: 1px;
+}
 
 /* ─────────────────── BUTTONS ─────────────────── */
 
@@ -452,9 +488,9 @@ html, body {
 .tool-btn:hover, .action-btn:hover {
   background: var(--hover);
   opacity: 1;
-  transform: translateY(-0.5px);
+  transform: translateY(-1px);
 }
-.tool-btn:active, .action-btn:active { transform: translateY(0.5px) scale(0.96); }
+.tool-btn:active, .action-btn:active { transform: scale(0.96); }
 .tool-btn.active {
   background: linear-gradient(180deg, var(--gold) 0%, var(--gold-strong) 100%);
   color: var(--gold-text);
@@ -486,6 +522,8 @@ html, body {
 
 .swatches { display: flex; gap: 6px; align-items: center; }
 .swatch {
+  appearance: none;
+  padding: 0;
   width: 22px;
   height: 22px;
   border-radius: 5px;
@@ -635,7 +673,10 @@ html, body {
   overflow-x: hidden;
   min-height: 0;
   flex: 1 1 auto;
+  /* Thin + theme-tinted so Windows/Linux don't show the chunky default
+     scrollbar against the dark panel. */
   scrollbar-width: thin;
+  scrollbar-color: var(--swatch-border) transparent;
 }
 
 .bar[data-orient='h'][data-settings-open='true'] .settings-panel {
@@ -798,7 +839,7 @@ html, body {
   color: var(--text);
 }
 .about-version {
-  font-family: "SF Mono", "JetBrains Mono", Menlo, monospace;
+  font-family: var(--font-mono);
   font-size: 10.5px;
   letter-spacing: 0.04em;
   color: var(--hint);
@@ -1071,7 +1112,7 @@ html, body {
 }
 
 .settings-path {
-  font-family: "SF Mono", "JetBrains Mono", Menlo, monospace;
+  font-family: var(--font-mono);
   font-size: 10.5px;
   letter-spacing: 0.01em;
   color: var(--text);
@@ -1172,7 +1213,7 @@ html, body {
   border-radius: 6px;
   padding: 6px 10px;
   font-size: 12px;
-  font-family: "SF Mono", "JetBrains Mono", Menlo, monospace;
+  font-family: var(--font-mono);
   outline: none;
   letter-spacing: 0.02em;
 }
@@ -1287,6 +1328,15 @@ html, body {
   margin-top: 4px;
 }
 
+/* Re-enable text selection where copying matters — AI answers, saved
+   file paths, error bodies, the version string. The global user-select:
+   none stays for chrome. */
+.chat-bubble, .chat-markdown, .settings-path, .about-version,
+.status-body, .chat-error, .ai-test-result {
+  user-select: text;
+  -webkit-user-select: text;
+}
+
 /* ─────────────────── CHAT PANEL ─────────────────── */
 
 .chat-panel {
@@ -1313,7 +1363,7 @@ html, body {
   border: 1px solid var(--group-border);
   padding: 2px 6px;
   border-radius: 4px;
-  font-family: "SF Mono", "JetBrains Mono", Menlo, monospace;
+  font-family: var(--font-mono);
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -1356,6 +1406,8 @@ html, body {
   flex: 1 1 auto;
   min-height: 0;
   overflow-y: auto;
+  scrollbar-width: thin;
+  scrollbar-color: var(--swatch-border) transparent;
   display: flex;
   flex-direction: column;
   gap: 6px;
@@ -1414,7 +1466,7 @@ html, body {
   border: 1px solid var(--border);
   border-radius: 3px;
   padding: 0 4px;
-  font-family: "SF Mono", "JetBrains Mono", Menlo, monospace;
+  font-family: var(--font-mono);
   font-size: 10.5px;
 }
 .chat-markdown pre {

@@ -40,6 +40,12 @@ interface DisplayTurn extends ChatTurn {
 // model could output <script>) — marked escapes by default.
 marked.setOptions({ breaks: true, gfm: true });
 
+// Platform-appropriate send-shortcut label. ⌘/↩ glyphs are meaningless
+// (and often missing from UI fonts) on Windows/Linux, where the actual
+// accelerator is Ctrl+Enter anyway.
+const IS_MAC = /mac/i.test(navigator.platform);
+const SEND_SHORTCUT = IS_MAC ? '⌘↩' : 'Ctrl+Enter';
+
 export function ChatPanel(props: Props) {
   const [session, setSession] = createSignal<ChatSessionPayload | null>(null);
   const [turns, setTurns] = createSignal<DisplayTurn[]>([]);
@@ -293,7 +299,9 @@ export function ChatPanel(props: Props) {
           ref={composerEl}
           class="chat-input"
           placeholder={
-            session() ? 'Ask a follow-up… (⌘↩ to send, Esc to close)' : 'Take a snip first'
+            session()
+              ? `Ask a follow-up… (${SEND_SHORTCUT} to send, Esc to close)`
+              : 'Take a snip first'
           }
           value={composer()}
           onInput={(e) => setComposer((e.currentTarget as HTMLTextAreaElement).value)}
@@ -313,7 +321,7 @@ export function ChatPanel(props: Props) {
             class="chat-send"
             onClick={onSend}
             disabled={!session() || composer().trim().length === 0}
-            title="Send (⌘↩)"
+            title={`Send (${SEND_SHORTCUT})`}
           >
             Send
           </button>

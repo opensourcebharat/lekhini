@@ -67,6 +67,16 @@ export function createToolbar(orientation: Orientation = 'h'): BrowserWindow {
 
   toolbar.setAlwaysOnTop(true, 'screen-saver', 2);
   toolbar.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true });
+  // 'screen-saver' + relative level are macOS-only; on Windows/Linux
+  // other topmost windows can end up above us. Re-assert whenever the
+  // toolbar loses focus so it stays reachable.
+  if (process.platform !== 'darwin') {
+    toolbar.on('blur', () => {
+      if (toolbar && !toolbar.isDestroyed()) {
+        toolbar.setAlwaysOnTop(true, 'screen-saver', 2);
+      }
+    });
+  }
   // Hide the toolbar from screen capture so the screenshot the user
   // takes via Lekhini contains the underlying app + their annotations
   // but NOT our toolbar chrome. macOS uses NSWindowSharingNone;

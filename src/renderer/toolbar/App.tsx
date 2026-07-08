@@ -195,8 +195,12 @@ function stuckHint(probeError: boolean): string {
 function shortenPath(p: string, max = 56): string {
   let s = p;
   // Best-effort home detection — `process.env.HOME` is not available
-  // in the renderer; fall back to the common macOS / Linux prefix.
-  const home = /^\/Users\/[^/]+/.exec(s)?.[0] ?? /^\/home\/[^/]+/.exec(s)?.[0];
+  // in the renderer; fall back to the common macOS / Linux / Windows
+  // prefixes.
+  const home =
+    /^\/Users\/[^/]+/.exec(s)?.[0] ??
+    /^\/home\/[^/]+/.exec(s)?.[0] ??
+    /^[A-Za-z]:[\\/]Users[\\/][^\\/]+/.exec(s)?.[0];
   if (home && s.startsWith(home)) s = '~' + s.slice(home.length);
   if (s.length <= max) return s;
   const tail = s.slice(-(max - 3));
@@ -889,6 +893,11 @@ export function ToolbarApp() {
   const showHint = (text: string) => setHint(text);
   const clearHint = () => setHint('');
   const isMac = createMemo(() => platform() === 'darwin');
+  // Keyboard-shortcut labels: mac glyphs on macOS, spelled-out keys
+  // elsewhere (⌘/⇧ mean nothing on Windows/Linux and the accelerators
+  // there are actually Ctrl-based).
+  const kbd = (mac: string, other: string) => (isMac() ? mac : other);
+  const toolHint = (hint: string) => (isMac() ? hint : hint.replace('⇧', 'Shift'));
   const isVert = createMemo(() => hub().orientation === 'v');
   const profileTools = createMemo(() => {
     const allowed = new Set(PROFILES[hub().profile].tools);
@@ -943,12 +952,14 @@ export function ToolbarApp() {
                       onClick={closeApp}
                       onMouseEnter={() => showHint('Quit')}
                       onMouseLeave={clearHint}
+                      aria-label="Quit Lekhini"
                     ><span>×</span></button>
                     <button
                       class="mac-light min"
                       onClick={minimize}
                       onMouseEnter={() => showHint('Minimize')}
                       onMouseLeave={clearHint}
+                      aria-label="Minimize toolbar"
                     ><span>−</span></button>
                   </div>
                 </Show>
@@ -972,12 +983,14 @@ export function ToolbarApp() {
                     onClick={minimize}
                     onMouseEnter={() => showHint('Minimize')}
                     onMouseLeave={clearHint}
+                    aria-label="Minimize toolbar"
                   >{Icons.minus()}</button>
                   <button
                     class="winctl danger"
                     onClick={closeApp}
                     onMouseEnter={() => showHint('Quit')}
                     onMouseLeave={clearHint}
+                    aria-label="Quit Lekhini"
                   >{Icons.close()}</button>
                 </Show>
               </div>
@@ -994,12 +1007,14 @@ export function ToolbarApp() {
                     onClick={closeApp}
                     onMouseEnter={() => showHint('Quit')}
                     onMouseLeave={clearHint}
+                    aria-label="Quit Lekhini"
                   ><span>×</span></button>
                   <button
                     class="mac-light min"
                     onClick={minimize}
                     onMouseEnter={() => showHint('Minimize')}
                     onMouseLeave={clearHint}
+                    aria-label="Minimize toolbar"
                   ><span>−</span></button>
                 </div>
               </Show>
@@ -1010,12 +1025,14 @@ export function ToolbarApp() {
                     onClick={minimize}
                     onMouseEnter={() => showHint('Minimize')}
                     onMouseLeave={clearHint}
+                    aria-label="Minimize toolbar"
                   >{Icons.minus()}</button>
                   <button
                     class="winctl danger"
                     onClick={closeApp}
                     onMouseEnter={() => showHint('Quit')}
                     onMouseLeave={clearHint}
+                    aria-label="Quit Lekhini"
                   >{Icons.close()}</button>
                 </div>
               </Show>
@@ -1040,8 +1057,9 @@ export function ToolbarApp() {
                   <button
                     class={`tool-btn ${hub().activeTool === t.id ? 'active' : ''}`}
                     onClick={() => setTool(t.id)}
-                    onMouseEnter={() => showHint(`${t.label} · ${t.hint}`)}
+                    onMouseEnter={() => showHint(`${t.label} · ${toolHint(t.hint)}`)}
                     onMouseLeave={clearHint}
+                    aria-label={t.label}
                   >{t.icon()}</button>
                 )}
               </For>
@@ -1053,26 +1071,30 @@ export function ToolbarApp() {
               <button
                 class="action-btn"
                 onClick={() => window.pen.relay.undo()}
-                onMouseEnter={() => showHint('Undo · ⌘Z')}
+                onMouseEnter={() => showHint(`Undo · ${kbd('⌘Z', 'Ctrl+Z')}`)}
                 onMouseLeave={clearHint}
+                aria-label="Undo"
               >{Icons.undo()}</button>
               <button
                 class="action-btn"
                 onClick={() => window.pen.relay.redo()}
-                onMouseEnter={() => showHint('Redo · ⌘⇧Z')}
+                onMouseEnter={() => showHint(`Redo · ${kbd('⌘⇧Z', 'Ctrl+Shift+Z')}`)}
                 onMouseLeave={clearHint}
+                aria-label="Redo"
               >{Icons.redo()}</button>
               <button
                 class="action-btn"
                 onClick={() => window.pen.relay.clear()}
-                onMouseEnter={() => showHint('Clear · ⌘⇧C')}
+                onMouseEnter={() => showHint(`Clear · ${kbd('⌘⇧C', 'Ctrl+Shift+C')}`)}
                 onMouseLeave={clearHint}
+                aria-label="Clear all annotations"
               >{Icons.clear()}</button>
               <button
                 class="action-btn"
                 onClick={() => window.pen.relay.screenshot()}
-                onMouseEnter={() => showHint('Screenshot · ⌘⇧S')}
+                onMouseEnter={() => showHint(`Screenshot · ${kbd('⌘⇧S', 'Ctrl+Shift+S')}`)}
                 onMouseLeave={clearHint}
+                aria-label="Save screenshot"
               >{Icons.camera()}</button>
               <Show when={hub().profile === 'trader' && aiReady()}>
                 <button
@@ -1093,6 +1115,7 @@ export function ToolbarApp() {
                   )
                 }
                 onMouseLeave={clearHint}
+                aria-label="Cycle whiteboard background"
               >{Icons.whiteboard()}</button>
               <button
                 class={`action-btn thickness-trigger ${hub().thicknessFlyoutOpen ? 'tinted' : ''}`}
@@ -1118,7 +1141,8 @@ export function ToolbarApp() {
               <div class="color-grid">
                 <For each={COLOR_PRESETS}>
                   {(c) => (
-                    <div
+                    <button
+                      type="button"
                       class={`swatch ${
                         hub().settings.color.toLowerCase() === c.toLowerCase() ? 'active' : ''
                       }`}
@@ -1126,6 +1150,7 @@ export function ToolbarApp() {
                       onClick={() => setColor(c)}
                       onMouseEnter={() => showHint(c.toUpperCase())}
                       onMouseLeave={clearHint}
+                      aria-label={`Color ${c.toUpperCase()}`}
                     />
                   )}
                 </For>
@@ -1195,7 +1220,8 @@ export function ToolbarApp() {
               <div class="swatches">
                 <For each={COLOR_PRESETS}>
                   {(c) => (
-                    <div
+                    <button
+                      type="button"
                       class={`swatch ${
                         hub().settings.color.toLowerCase() === c.toLowerCase() ? 'active' : ''
                       }`}
@@ -1203,6 +1229,7 @@ export function ToolbarApp() {
                       onClick={() => setColor(c)}
                       onMouseEnter={() => showHint(c.toUpperCase())}
                       onMouseLeave={clearHint}
+                      aria-label={`Color ${c.toUpperCase()}`}
                     />
                   )}
                 </For>

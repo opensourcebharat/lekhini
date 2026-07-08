@@ -111,11 +111,7 @@ export async function copyFocusedSnipToClipboard(): Promise<void> {
 
   const png = await captureCroppedComposite(overlay, display, rect);
   if (!png) {
-    if (handleCaptureFailure()) return;
-    broadcast('capture:error', {
-      message: "Couldn't read the screen — try again.",
-      recoverable: true,
-    });
+    handleCaptureFailure();
     return;
   }
 
@@ -211,8 +207,10 @@ export async function captureFocusedDisplay(): Promise<void> {
 
 // Called when desktopCapturer returns nothing. On macOS this almost
 // always means permission was denied at the system prompt (which we
-// can't intercept). Re-check status and surface the modal so the user
-// gets feedback instead of silent failure.
+// can't intercept) — surface the permission modal. Elsewhere (notably
+// Linux/Wayland, where the portal request can be cancelled or fail)
+// there is no permission panel to show, so emit a capture error —
+// anything is better than silent failure.
 function handleCaptureFailure(): boolean {
   if (needsScreenModal()) {
     broadcast('permissions:needed', { reason: 'screen' });
@@ -226,6 +224,10 @@ function handleCaptureFailure(): boolean {
     });
     return true;
   }
+  broadcast('capture:error', {
+    message: "Couldn't read the screen — try again.",
+    recoverable: true,
+  });
   return false;
 }
 
@@ -237,8 +239,16 @@ async function fullDisplayPng(display: Electron.Display): Promise<Buffer | null>
       height: display.size.height * display.scaleFactor,
     },
   });
-  const matching =
-    sources.find((s) => Number(s.display_id) === display.id) ?? sources[0];
+  // Match the requested display. `display_id` is reliable on macOS and
+  // Windows but typically empty on Linux/Wayland (PipeWire portal), so
+  // fall back to positional matching — getSources() returns screens in
+  // the same order as screen.getAllDisplays() — before giving up and
+  // taking the first source.
+  let matching = sources.find((s) => Number(s.display_id) === display.id);
+  if (!matching) {
+    const index = screen.getAllDisplays().findIndex((d) => d.id === display.id);
+    matching = sources[index] ?? sources[0];
+  }
   if (!matching) return null;
   // toPNG() goes straight to a Buffer — no base64 dataURL middleman.
   // Buffer is structured-clonable over IPC as raw bytes.

@@ -76,6 +76,14 @@ export function setDrawMode(enabled: boolean) {
     if (win.isDestroyed()) continue;
     if (enabled) {
       win.setIgnoreMouseEvents(false);
+      // The 'screen-saver' z-level only exists on macOS; on Windows and
+      // Linux another topmost window (or a fullscreen app) can slip
+      // above the overlay. Re-asserting on every draw-mode entry pushes
+      // the overlay back to the top of the topmost band right when the
+      // user needs it.
+      if (process.platform !== 'darwin') {
+        win.setAlwaysOnTop(true, 'screen-saver');
+      }
     } else {
       win.setIgnoreMouseEvents(true, { forward: true });
     }
