@@ -137,6 +137,10 @@ export interface PerToolWidth {
   pen: number;
   eraser: number;
   highlighter: number;
+  // Shared width for the stroked shapes (line / trendline / arrow /
+  // ellipse) — they want hairline-to-thin strokes, not the fat widths
+  // the draw tools use, so they remember their own value.
+  shape: number;
 }
 
 export type Orientation = 'h' | 'v';
@@ -354,6 +358,11 @@ export type IpcChannel =
   | 'window:platform'
   | 'toolbar:on-right-side'
   | 'toolbar:set-content-size'
+  // Flyout child window: the toolbar reports the anchor button's
+  // window-relative rect before opening; the flyout page reports its
+  // rendered content size so main can size + place the window.
+  | 'flyout:anchor'
+  | 'flyout:set-size'
   | 'app:info'
   // Auto-update (electron-updater → GitHub Releases). `get` returns the
   // current snapshot; `check` forces a check; `install` quits and

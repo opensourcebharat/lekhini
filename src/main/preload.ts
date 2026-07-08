@@ -97,6 +97,16 @@ const api = {
     onError: (cb: (payload: { message: string; recoverable: boolean }) => void) =>
       bind('capture:error', cb as (v: unknown) => void),
   },
+  flyout: {
+    // Toolbar → main: where the flyout should anchor (rect relative to
+    // the toolbar window), sent just before hub.update({ flyout }).
+    setAnchor: (rect: { x: number; y: number; w: number; h: number }) =>
+      ipcRenderer.invoke('flyout:anchor' satisfies IpcChannel, rect),
+    // Flyout page → main: exact rendered card size; main resizes the
+    // flyout window to match and shows it.
+    setSize: (size: { w: number; h: number }) =>
+      ipcRenderer.invoke('flyout:set-size' satisfies IpcChannel, size),
+  },
   settings: {
     // saveDir + alwaysAskSavePath are part of HubState — write them
     // via `pen.hub.update({ saveDir, alwaysAskSavePath })`. This

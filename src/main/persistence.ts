@@ -14,7 +14,7 @@ export interface PersistedState {
   orientation: Orientation;
   theme: Theme;
   profile: ProfileId;
-  perToolWidth: { pencil: number; pen: number; eraser: number; highlighter: number };
+  perToolWidth: { pencil: number; pen: number; eraser: number; highlighter: number; shape: number };
   color: string;
   activeTool: ToolId;
   // Last-used tool per toolbar group (draw / shapes), so each group
@@ -68,7 +68,7 @@ export const PERSISTED_DEFAULTS: PersistedState = {
   // their stored choice.
   theme: 'light',
   profile: 'general',
-  perToolWidth: { pencil: 2, pen: 4, eraser: 20, highlighter: 18 },
+  perToolWidth: { pencil: 2, pen: 4, eraser: 20, highlighter: 18, shape: 2 },
   color: GRAPHITE_COLOR,
   activeTool: 'pencil',
   groupLastTool: { ...GROUP_DEFAULTS },

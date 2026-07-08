@@ -497,6 +497,17 @@ html, body {
   animation: flyoutIn 0.16s cubic-bezier(0.2, 0.7, 0.2, 1);
 }
 
+/* The flyout child window: the card IS the window — static position,
+   no absolute placement, no shadow of its own (the OS window shadow
+   wraps the rounded card). The .bar wrapper only supplies the theme
+   tokens. */
+.flyout-window { display: block; }
+.flyout-card.is-window {
+  position: static;
+  width: fit-content;
+  box-shadow: none;
+}
+
 /* Color flyout content */
 .color-flyout {
   display: flex;

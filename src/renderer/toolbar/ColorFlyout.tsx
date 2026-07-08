@@ -1,9 +1,15 @@
 import { For, Show } from 'solid-js';
-import { COLOR_PRESETS, THICKNESS_PRESETS } from '../../shared/constants';
+import { COLOR_PRESETS, SHAPE_WIDTH_TOOLS, THICKNESS_PRESETS } from '../../shared/constants';
 import type { ToolId } from '../../shared/types';
 
-type ThicknessTool = keyof typeof THICKNESS_PRESETS;
-const hasThickness = (t: ToolId): t is ThicknessTool => t in THICKNESS_PRESETS;
+type PresetKey = keyof typeof THICKNESS_PRESETS;
+// Which preset row applies to the active tool: draw tools have their
+// own; the stroked shapes share the thin 'shape' scale.
+function presetKey(t: ToolId): PresetKey | null {
+  if (t in THICKNESS_PRESETS) return t as PresetKey;
+  if (SHAPE_WIDTH_TOOLS.has(t)) return 'shape';
+  return null;
+}
 
 interface Props {
   color: string;
@@ -43,9 +49,9 @@ export function ColorFlyout(props: Props) {
           <span class="hex-glyph">+</span>
         </label>
       </div>
-      <Show when={hasThickness(props.tool)}>
+      <Show when={presetKey(props.tool)}>
         <div class="cf-thickness">
-          <For each={THICKNESS_PRESETS[props.tool as ThicknessTool].slice(0, 4)}>
+          <For each={THICKNESS_PRESETS[presetKey(props.tool)!].slice(0, 4)}>
             {(w) => (
               <button
                 class={`thickness-chip ${props.width === w ? 'active' : ''}`}

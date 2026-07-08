@@ -34,8 +34,7 @@ import { Icons, Logo } from './icons';
 import { ChatPanel } from './ChatPanel';
 import { ToolButton } from './ToolButton';
 import { GroupButton } from './GroupButton';
-import { FlyoutCard } from './FlyoutCard';
-import { ColorFlyout } from './ColorFlyout';
+import { TOOL_BY_ID, toolHint } from './toolDefs';
 
 // The cloud providers (kept as an opt-in fallback). Local (Ollama)
 // has its own settings section, so these mirror maps are cloud-only.
@@ -116,7 +115,7 @@ interface HubSnapshot {
   settingsOpen: boolean;
   flyout: FlyoutId | null;
   groupLastTool: Partial<Record<GroupId, ToolId>>;
-  perToolWidth: { pencil: number; pen: number; eraser: number; highlighter: number };
+  perToolWidth: { pencil: number; pen: number; eraser: number; highlighter: number; shape: number };
   saveDir: string | null;
   alwaysAskSavePath: boolean;
   statusPanelOpen: boolean;
@@ -145,37 +144,6 @@ const TEXT_FONTS: { label: string; value: string }[] = [
   { label: 'Mono', value: "Menlo, Consolas, 'Courier New', monospace" },
   { label: 'Rounded', value: "'SF Pro Rounded', 'Segoe UI', system-ui, sans-serif" },
 ];
-
-interface ToolDef {
-  id: ToolId;
-  label: string;
-  hint: string;
-  icon: () => ReturnType<(typeof Icons)['pen']>;
-}
-
-const ALL_TOOLS: ToolDef[] = [
-  { id: 'pencil',      label: 'Pencil',      hint: 'Q',          icon: Icons.pencil },
-  { id: 'pen',         label: 'Pen',         hint: 'P',          icon: Icons.pen },
-  { id: 'eraser',      label: 'Eraser',      hint: 'E',          icon: Icons.eraser },
-  { id: 'hand',        label: 'Hand (move)', hint: 'M',          icon: Icons.hand },
-  { id: 'highlighter', label: 'Highlighter', hint: 'H',          icon: Icons.highlighter },
-  { id: 'line',        label: 'H/V Line',    hint: 'L',          icon: Icons.line },
-  { id: 'trendline',   label: 'Trendline',   hint: 'T · ⇧ snap', icon: Icons.trendline },
-  { id: 'arrow',       label: 'Arrow',       hint: 'A',          icon: Icons.arrow },
-  { id: 'text',        label: 'Text',        hint: 'X',          icon: Icons.text },
-  { id: 'region',      label: 'Rectangle',   hint: 'R',          icon: Icons.region },
-  { id: 'ellipse',     label: 'Ellipse',     hint: 'O',          icon: Icons.ellipse },
-  { id: 'fib',         label: 'Fibonacci',   hint: 'F',          icon: Icons.fib },
-  { id: 'snip',        label: 'Snip',        hint: 'C · ⇧ save', icon: Icons.snip },
-];
-
-const TOOL_BY_ID: Record<ToolId, ToolDef> = ALL_TOOLS.reduce(
-  (acc, t) => {
-    acc[t.id] = t;
-    return acc;
-  },
-  {} as Record<ToolId, ToolDef>,
-);
 
 // One rendered slot in the tools column: either a plain tool button or
 // a group button (draw / shapes) carrying its profile-filtered members.
@@ -234,7 +202,7 @@ export function ToolbarApp() {
     settingsOpen: false,
     flyout: null,
     groupLastTool: {},
-    perToolWidth: { pencil: 3, pen: 4, eraser: 20, highlighter: 18 },
+    perToolWidth: { pencil: 3, pen: 4, eraser: 20, highlighter: 18, shape: 2 },
     saveDir: null,
     alwaysAskSavePath: false,
     statusPanelOpen: false,
@@ -655,13 +623,6 @@ export function ToolbarApp() {
             : Math.max(barMainHeight, sideHeight);
       }
     }
-    // h-mode: an open flyout card floats below the bar — include it.
-    if (s.orientation === 'h' && s.flyout !== null) {
-      const card = barMainRef.parentElement?.querySelector(
-        '.flyout-card',
-      ) as HTMLElement | null;
-      if (card) target = Math.max(target, barMainHeight + 8 + card.offsetHeight + 8);
-    }
     // 2px for the bar-main border.
     target += 2;
     if (target !== lastReported && target >= 60) {
@@ -691,7 +652,6 @@ export function ToolbarApp() {
     void s.settingsOpen;
     void s.statusPanelOpen;
     void s.chatOpen;
-    void s.flyout;
     void s.profile;
     void s.activeTool;
     void panelKind();
@@ -730,15 +690,21 @@ export function ToolbarApp() {
     void window.pen.win.toolbarOnRightSide().then(setSettingsOnLeft);
   };
   const closeFlyout = () => void window.pen.hub.update({ flyout: null });
-  // Anchor elements for each flyout, captured at open time so the card
-  // can position itself next to the button that spawned it.
+  // Anchor elements for each flyout. The flyout renders in its own
+  // child window (so this window's bounds never change); main places
+  // that window next to the anchor rect we report here.
   const anchorEls: Partial<Record<FlyoutId, HTMLElement>> = {};
-  const [flyoutAnchor, setFlyoutAnchor] = createSignal<DOMRect | null>(null);
   const openFlyout = (id: FlyoutId) => {
     const el = anchorEls[id];
-    setFlyoutAnchor(el ? el.getBoundingClientRect() : null);
-    refreshSide();
-    void window.pen.hub.update({ flyout: id });
+    const r = el?.getBoundingClientRect();
+    void (async () => {
+      // Anchor must land in main before the hub broadcast triggers the
+      // flyout window's show/position pass.
+      await window.pen.flyout.setAnchor(
+        r ? { x: r.x, y: r.y, w: r.width, h: r.height } : { x: 8, y: 8, w: 40, h: 40 },
+      );
+      await window.pen.hub.update({ flyout: id });
+    })();
   };
   const toggleFlyout = (id: FlyoutId) => {
     if (hub().flyout === id) closeFlyout();
@@ -756,8 +722,6 @@ export function ToolbarApp() {
     }
   };
   const setColor = (c: string) => void window.pen.hub.update({ settings: { color: c } });
-  const pickThickness = (n: number) =>
-    void window.pen.hub.update({ settings: { width: n } });
   const toggleDraw = () => void window.pen.hub.update({ drawMode: !hub().drawMode });
   const toggleOrient = () =>
     void window.pen.hub.update({ orientation: hub().orientation === 'h' ? 'v' : 'h' });
@@ -940,7 +904,7 @@ export function ToolbarApp() {
   // existing layout rules (flex-direction switch in v-mode, etc.)
   // apply uniformly whether settings or a status panel is open.
   const sidePanelOpen = createMemo(() =>
-    hub().settingsOpen || panelKind() !== null || hub().chatOpen || hub().flyout !== null,
+    hub().settingsOpen || panelKind() !== null || hub().chatOpen,
   );
 
   // Any AI path usable: a cloud provider configured, OR Local AI on with
@@ -957,7 +921,6 @@ export function ToolbarApp() {
   // elsewhere (⌘/⇧ mean nothing on Windows/Linux and the accelerators
   // there are actually Ctrl-based).
   const kbd = (mac: string, other: string) => (isMac() ? mac : other);
-  const toolHint = (hint: string) => (isMac() ? hint : hint.replace('⇧', 'Shift'));
   // Top-level tool slots: groups fold their (profile-filtered) members
   // behind one button; ungrouped tools render plain. A group with a
   // single member renders as that plain tool; an empty group is hidden.
@@ -1942,44 +1905,6 @@ export function ToolbarApp() {
               </div>
             </Show>
           </div>
-        </Show>
-
-        {/* ─── FLYOUT CARD ─── floating tool / color card beside its
-             anchor button (Epic Pen style). Keyed so the card remounts
-             (and re-measures its position) per flyout id. */}
-        <Show when={hub().flyout} keyed>
-          {(fid) => (
-            <FlyoutCard
-              anchor={flyoutAnchor() ?? new DOMRect(8, 8, 40, 40)}
-              orient={hub().orientation}
-              side={settingsOnLeft() ? 'left' : 'right'}
-              label={fid === 'color' ? 'Color and thickness' : GROUP_LABELS[fid as GroupId]}
-            >
-              <Show
-                when={fid === 'color'}
-                fallback={
-                  <For each={groupToolsForProfile(fid as GroupId, hub().profile)}>
-                    {(t) => (
-                      <ToolButton
-                        active={hub().activeTool === t}
-                        title={`${TOOL_BY_ID[t].label} · ${toolHint(TOOL_BY_ID[t].hint)}`}
-                        label={TOOL_BY_ID[t].label}
-                        onClick={() => setTool(t)}
-                      >{TOOL_BY_ID[t].icon()}</ToolButton>
-                    )}
-                  </For>
-                }
-              >
-                <ColorFlyout
-                  color={hub().settings.color}
-                  width={hub().settings.width}
-                  tool={hub().activeTool}
-                  onColor={setColor}
-                  onWidth={pickThickness}
-                />
-              </Show>
-            </FlyoutCard>
-          )}
         </Show>
       </Show>
     </div>

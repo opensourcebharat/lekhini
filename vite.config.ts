@@ -63,6 +63,7 @@ export default defineConfig({
       input: {
         overlay: path.resolve(__dirname, 'src/renderer/overlay/index.html'),
         toolbar: path.resolve(__dirname, 'src/renderer/toolbar/index.html'),
+        flyout: path.resolve(__dirname, 'src/renderer/flyout/index.html'),
       },
     },
   },

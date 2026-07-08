@@ -81,16 +81,6 @@ export const SETTINGS_EXTRA = {
   v: { w: 260, h: 0 },
 };
 
-// Extra window space claimed while a flyout card is open. Vertical
-// grows sideways so the card can float beside its anchor button
-// (320 fits the widest card: 6 shape tools plus padding). Horizontal
-// flyouts drop below the bar; the renderer includes their height in
-// its content-size report, so no main-side extra is needed — the h
-// value here is only the first-frame estimate before that report.
-export const FLYOUT_EXTRA = {
-  h: { w: 0, h: 72 },
-  v: { w: 320, h: 0 },
-};
 
 export const TOOLBAR_W = TOOLBAR_SIZES.h.w;
 export const TOOLBAR_H = TOOLBAR_SIZES.h.h;
@@ -127,14 +117,27 @@ export const TOOL_HOTKEYS: Record<string, ToolId> = {
 // with a sane progression in between. Pencil leans fine; pen has a bit
 // more body since it reads as ink rather than graphite.
 export const THICKNESS_PRESETS: Record<
-  'pencil' | 'pen' | 'eraser' | 'highlighter',
+  'pencil' | 'pen' | 'eraser' | 'highlighter' | 'shape',
   number[]
 > = {
   pencil: [0.5, 1, 2, 3, 6],
   pen: [2, 4, 8, 14, 22],
   eraser: [10, 18, 28, 44, 64],
   highlighter: [12, 18, 26, 34, 44],
+  // Stroked shapes (line/trendline/arrow/ellipse) read as outlines, so
+  // the whole scale sits far thinner than the draw tools.
+  shape: [1, 2, 3, 5],
 };
+
+// Tools whose stroke width is the shared 'shape' slot in PerToolWidth.
+// (region draws without a width; fib has fixed level lines; text sizes
+// by font.)
+export const SHAPE_WIDTH_TOOLS = new Set<ToolId>([
+  'line',
+  'trendline',
+  'arrow',
+  'ellipse',
+]);
 
 export const COLOR_PRESETS = [
   '#1c1c1e',

@@ -1,6 +1,6 @@
 import { BrowserWindow, app, ipcMain, screen } from 'electron';
 import path from 'node:path';
-import { FLYOUT_EXTRA, SETTINGS_EXTRA, TOOLBAR_SIZES } from '../../shared/constants';
+import { SETTINGS_EXTRA, TOOLBAR_SIZES } from '../../shared/constants';
 import { subscribe } from '../hub';
 import type { Orientation } from '../../shared/types';
 
@@ -33,16 +33,16 @@ function defaultPosition(orientation: Orientation, minimized: boolean, dock: Doc
 }
 
 // What is claiming extra window space beyond the bare bar: a docked
-// side panel (settings / status / chat), a floating flyout card, or
-// nothing. Panels and flyouts are mutually exclusive (hub enforces it)
-// but claim different amounts of space.
-export type DockKind = 'none' | 'panel' | 'flyout';
+// side panel (settings / status / chat) or nothing. Flyout submenus
+// live in their own child window (see flyout.ts) precisely so they
+// never affect this window's bounds.
+export type DockKind = 'none' | 'panel';
 
 export function sizeFor(orientation: Orientation, minimized: boolean, dock: DockKind) {
   if (minimized) return MIN_SIZE;
   const base = TOOLBAR_SIZES[orientation];
   if (dock === 'none') return { w: base.w, h: base.h };
-  const extra = dock === 'panel' ? SETTINGS_EXTRA[orientation] : FLYOUT_EXTRA[orientation];
+  const extra = SETTINGS_EXTRA[orientation];
   return { w: base.w + extra.w, h: base.h + extra.h };
 }
 
@@ -116,14 +116,19 @@ export function resizeToolbar(
   reposition: 'keep' | 'default' = 'keep',
 ) {
   if (!toolbar || toolbar.isDestroyed()) return;
-  const { w, h } = sizeFor(orientation, minimized, dock);
+  const sized = sizeFor(orientation, minimized, dock);
   const open = dock !== 'none';
+
+  // All resizes are instant (animate: false). macOS's animated setBounds
+  // runs a ~200ms NSWindow animation that fights the renderer's own
+  // content-size corrections — the combination reads as the whole bar
+  // shaking whenever a panel or flyout opens.
 
   if (reposition === 'default') {
     // Orientation changed — drop the existing anchor and place fresh.
     anchorPos = null;
     const pos = defaultPosition(orientation, minimized, dock);
-    toolbar.setBounds({ x: pos.x, y: pos.y, width: pos.w, height: pos.h }, true);
+    toolbar.setBounds({ x: pos.x, y: pos.y, width: pos.w, height: pos.h }, false);
     // If a panel/flyout is still open after the orientation change,
     // pre-seed the anchor to the natural closed position so the
     // inevitable close-event restores there instead of drifting on the
@@ -137,15 +142,35 @@ export function resizeToolbar(
   }
 
   const [curX, curY] = toolbar.getPosition();
-  const [curW] = toolbar.getSize();
+  const [curW, curH] = toolbar.getSize();
   const display = screen.getDisplayNearestPoint({ x: curX, y: curY });
+
+  // The renderer owns the content axis (height in v-mode, both axes in
+  // h-mode) via toolbar:set-content-size. Main must not snap those back
+  // to the static first-paint estimates on every dock change — that
+  // fight is what used to make the bar jump. Main-owned axes only:
+  //   v-mode width (bar / panel / flyout), and both axes across the
+  //   minimize ↔ restore transition (where the content axis has no
+  //   meaningful current value to preserve).
+  const wasPill = curW === MIN_SIZE.w && curH === MIN_SIZE.h;
+  let w: number;
+  let h: number;
+  if (minimized) {
+    ({ w, h } = MIN_SIZE);
+  } else if (orientation === 'v') {
+    w = sized.w;
+    h = wasPill ? sized.h : curH;
+  } else {
+    if (!wasPill) return; // h-mode: renderer-driven on both axes
+    ({ w, h } = sized);
+  }
 
   if (!open && anchorPos) {
     let { x: nextX, y: nextY } = anchorPos;
     anchorPos = null;
     nextX = clamp(nextX, display.workArea.x + 8, display.workArea.x + display.workArea.width - w - 8);
     nextY = clamp(nextY, display.workArea.y + 8, display.workArea.y + display.workArea.height - h - 8);
-    toolbar.setBounds({ x: nextX, y: nextY, width: w, height: h }, true);
+    toolbar.setBounds({ x: nextX, y: nextY, width: w, height: h }, false);
     invalidateShadow();
     return;
   }
@@ -169,9 +194,10 @@ export function resizeToolbar(
     }
   }
 
+  if (nextX === curX && nextY === curY && w === curW && h === curH) return;
   nextX = clamp(nextX, display.workArea.x + 8, display.workArea.x + display.workArea.width - w - 8);
   nextY = clamp(nextY, display.workArea.y + 8, display.workArea.y + display.workArea.height - h - 8);
-  toolbar.setBounds({ x: nextX, y: nextY, width: w, height: h }, true);
+  toolbar.setBounds({ x: nextX, y: nextY, width: w, height: h }, false);
   invalidateShadow();
 }
 
